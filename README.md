@@ -17,6 +17,8 @@ For installation, build instructions, and configuration, see [INSTALL.md](INSTAL
 - **Share one Windows environment:** Apps use the same Windows registry and installed components, and multiple programs can run at the same time.
 - **Integrate with your desktop:** Import supported shortcuts exported by Proton into the Linux application menu and desktop.
 
+By default, WinBridge reuses one shared Wine/Proton environment (a "prefix") for all apps. New apps reuse the existing Windows environment and shared components, reducing disk usage compared with creating a separate prefix for every app. They can also start faster when Wine services are already running in that environment. Startup gains depend on the app and whether the environment is already active; they are not guaranteed for every launch.
+
 ## WinBridge Manager
 
 Open **WinBridge Manager** from your application menu to browse and manage your Windows programs.
