@@ -21,19 +21,643 @@
 #include <QProcess>
 #include "i18n.h"
 
+inline QString retroStyleSheet(QString theme = QString()) {
+    if (theme.isEmpty()) {
+        theme = QSettings("WinBridge", "Manager").value("theme", "classic").toString();
+    }
+    bool dark = (theme == "dark");
+
+    QString btnFace = dark ? "#2c2f35" : "#c0c0c0";
+    QString btnLight = dark ? "#525763" : "#ffffff";
+    QString btnShadow = dark ? "#181a1d" : "#808080";
+    QString btnDarkShadow = dark ? "#0e0f11" : "#404040";
+    QString windowBg = dark ? "#17181c" : "#ffffff";
+    QString textMain = dark ? "#eef0f3" : "#000000";
+    QString textMuted = dark ? "#9aa0aa" : "#444444";
+    QString accent = dark ? "#7ea8f8" : "#000080";
+    QString accentSecondary = dark ? "#9fc0fc" : "#004080";
+    QString topNavGrad = dark
+        ? "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #101624, stop:0.75 #182236, stop:1 #243450)"
+        : "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #000080, stop:0.75 #083b82, stop:1 #1084d0)";
+    QString cardBorder = dark ? "2px groove #525763" : "2px groove #ffffff";
+    QString sunkenBg = dark ? "#222429" : "#c0c0c0";
+    QString itemHover = dark ? "#222733" : "#f0f4fc";
+    QString itemSelect = dark ? "#193563" : "#c8daf8";
+    QString itemSelectBorder = dark ? "#5892f3" : "#000080";
+    QString shortcutsBg = dark ? "#222429" : "#ece9d8";
+    QString scrollTrack = dark ? "#1e2024" : "#d4d0c8";
+    QString btnHover = dark ? "#373b43" : "#d4d4d4";
+    QString btnPressed = dark ? "#202226" : "#b8b8b8";
+    QString dangerHoverBg = dark ? "#4c2424" : "#dec8c8";
+    QString dangerHoverText = dark ? "#ff8888" : "#800000";
+    QString listDivider = dark ? "#26282e" : "#d4d0c8";
+    QString runningBg = dark ? "#107c10" : "#008000";
+    QString runningTop = dark ? "#3cb13c" : "#50d050";
+    QString runningBottom = dark ? "#0a4d0a" : "#004000";
+    QString focusBorder = dark ? "#ffffff" : "#000000";
+
+    QString s = QString::fromUtf8(R"(
+        QWidget {
+            background: {{btnFace}};
+            color: {{textMain}};
+            font-family: 'Segoe UI', 'Tahoma', 'MS Sans Serif', 'DejaVu Sans', sans-serif;
+            font-size: 12px;
+        }
+        QFrame#topNav {
+            background: {{topNavGrad}};
+            border-bottom: 2px solid {{btnShadow}};
+        }
+        QLabel {
+            background: transparent;
+        }
+        QLabel#brand {
+            font-size: 30px;
+            font-weight: bold;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+        }
+        QLabel#brandSub {
+            font-size: 13px;
+            font-weight: bold;
+            color: #ffeb80;
+            letter-spacing: 1.5px;
+        }
+        QLabel#eyebrow {
+            color: {{accent}};
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        QLabel#heading {
+            font-size: 22px;
+            font-weight: bold;
+            color: {{accent}};
+        }
+        QLabel#muted {
+            color: {{textMuted}};
+            font-size: 12px;
+        }
+        QLabel#count {
+            font-size: 26px;
+            font-weight: bold;
+            color: {{accent}};
+        }
+        QLabel#engine {
+            font-size: 13px;
+            font-weight: bold;
+            color: {{accentSecondary}};
+        }
+        QLabel#envPath {
+            font-size: 12px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QFrame#heroBanner {
+            background: {{btnFace}};
+            border: {{cardBorder}};
+            border-radius: 0px;
+        }
+        QFrame#statCard {
+            background: {{sunkenBg}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            border-radius: 0px;
+            padding: 5px 10px;
+        }
+        QFrame#detail {
+            background: {{btnFace}};
+            border: {{cardBorder}};
+            border-radius: 0px;
+        }
+        QGroupBox {
+            background: {{btnFace}};
+            border: {{cardBorder}};
+            border-radius: 0px;
+            margin-top: 10px;
+            padding-top: 10px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            left: 8px;
+            padding: 0 4px;
+            background: {{btnFace}};
+        }
+        QLabel#appIcon {
+            background: {{btnFace}};
+            color: {{accent}};
+            border-top: 1px solid {{btnLight}};
+            border-left: 1px solid {{btnLight}};
+            border-right: 1px solid {{btnShadow}};
+            border-bottom: 1px solid {{btnShadow}};
+            border-radius: 0px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        QLabel#badge {
+            background: {{sunkenBg}};
+            color: {{accent}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            border-radius: 0px;
+            font-size: 38px;
+            font-weight: bold;
+        }
+        QLabel#appName {
+            font-size: 14px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QLabel#installed {
+            background: {{btnFace}};
+            color: {{accent}};
+            border-top: 1px solid {{btnShadow}};
+            border-left: 1px solid {{btnShadow}};
+            border-right: 1px solid {{btnLight}};
+            border-bottom: 1px solid {{btnLight}};
+            border-radius: 0px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        QLabel#running {
+            background: {{runningBg}};
+            color: #ffffff;
+            border-top: 1px solid {{runningTop}};
+            border-left: 1px solid {{runningTop}};
+            border-right: 1px solid {{runningBottom}};
+            border-bottom: 1px solid {{runningBottom}};
+            border-radius: 0px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        QLabel#detailName {
+            font-size: 18px;
+            font-weight: bold;
+            color: {{accent}};
+        }
+        QPushButton {
+            background: {{btnFace}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 5px 13px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        QPushButton:hover {
+            background: {{btnHover}};
+        }
+        QPushButton:pressed {
+            background: {{btnPressed}};
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            padding-top: 6px;
+            padding-left: 14px;
+            padding-right: 12px;
+            padding-bottom: 4px;
+        }
+        QPushButton:focus {
+            outline: 1px dotted {{textMain}};
+        }
+        QPushButton:disabled {
+            color: {{btnShadow}};
+            background: {{btnFace}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnShadow}};
+            border-bottom: 2px solid {{btnShadow}};
+        }
+        QPushButton#primary {
+            background: {{btnFace}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            font-weight: bold;
+        }
+        QPushButton#primary:hover {
+            background: {{btnHover}};
+        }
+        QPushButton#primary:pressed {
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            background: {{btnPressed}};
+        }
+        QPushButton#primary:disabled {
+            color: {{btnShadow}};
+            background: {{btnFace}};
+            border-color: {{btnShadow}};
+        }
+        QPushButton#danger {
+            background: {{btnFace}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            font-weight: bold;
+        }
+        QPushButton#danger:hover {
+            background: {{dangerHoverBg}};
+            color: {{dangerHoverText}};
+        }
+        QPushButton#danger:pressed {
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            background: {{btnPressed}};
+        }
+        QPushButton#danger:disabled {
+            background: {{btnFace}};
+            color: {{btnShadow}};
+            border-color: {{btnShadow}};
+        }
+        QPushButton#itemKill, QPushButton#killAppButton {
+            background: {{btnFace}};
+            color: {{dangerHoverText}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        QPushButton#itemKill:hover, QPushButton#killAppButton:hover {
+            background: {{dangerHoverBg}};
+            color: {{dangerHoverText}};
+        }
+        QPushButton#itemKill:pressed, QPushButton#killAppButton:pressed {
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            background: {{btnPressed}};
+        }
+        QPushButton#killAppButton:disabled {
+            background: {{btnFace}};
+            border-color: {{btnShadow}};
+            color: {{btnShadow}};
+        }
+        QPushButton#itemUninstall {
+            background: {{btnFace}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        QPushButton#itemUninstall:hover {
+            background: {{dangerHoverBg}};
+            color: {{dangerHoverText}};
+        }
+        QPushButton#itemUninstall:pressed {
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            background: {{btnPressed}};
+        }
+        QPushButton#itemUninstall:disabled {
+            background: {{btnFace}};
+            border-color: {{btnShadow}};
+            color: {{btnShadow}};
+        }
+        QPushButton#filterTab {
+            background: {{btnFace}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 5px 14px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        QPushButton#filterTab:hover {
+            background: {{btnHover}};
+        }
+        QPushButton#filterTab:checked {
+            background: {{btnHover}};
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            color: {{accent}};
+        }
+        QPushButton#shortcutToggle {
+            background: {{btnFace}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QPushButton#shortcutToggle:hover {
+            background: {{btnHover}};
+        }
+        QPushButton#shortcutToggle:pressed {
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+        }
+        QPushButton#shortcutToggle:disabled {
+            color: {{btnShadow}};
+            background: {{btnFace}};
+            border-color: {{btnShadow}};
+        }
+        QFrame#shortcutsPanel {
+            background: {{shortcutsBg}};
+            border-top: 1px solid {{btnShadow}};
+            border-left: 1px solid {{btnShadow}};
+            border-right: 1px solid {{btnLight}};
+            border-bottom: 1px solid {{btnLight}};
+            border-radius: 0px;
+            padding: 8px 16px 12px 16px;
+        }
+        QLabel#miniAppIcon {
+            background: {{btnFace}};
+            color: {{accent}};
+            border-top: 1px solid {{btnLight}};
+            border-left: 1px solid {{btnLight}};
+            border-right: 1px solid {{btnShadow}};
+            border-bottom: 1px solid {{btnShadow}};
+            border-radius: 0px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        QLabel#shortcutName {
+            font-size: 12px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QCheckBox {
+            color: {{textMain}};
+            spacing: 6px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        QCheckBox::indicator {
+            width: 13px;
+            height: 13px;
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            background: {{windowBg}};
+            border-radius: 0px;
+        }
+        QCheckBox::indicator:checked {
+            background: {{accent}};
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+        }
+        QLineEdit#search, QLineEdit#prefix {
+            background: {{windowBg}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            border-radius: 0px;
+            padding: 5px 8px;
+            selection-background-color: {{accent}};
+            selection-color: #ffffff;
+            color: {{textMain}};
+            font-size: 12px;
+        }
+        QLineEdit#search:focus, QLineEdit#prefix:focus {
+            border-top: 2px solid {{focusBorder}};
+            border-left: 2px solid {{focusBorder}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+        }
+        QWidget#itemContainer, QWidget#itemCard {
+            background: transparent;
+        }
+        QListWidget#programList {
+            background: {{windowBg}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            border-radius: 0px;
+            outline: 0;
+            padding: 0px;
+        }
+        QListWidget#programList::item {
+            background: {{windowBg}};
+            border-bottom: 1px solid {{listDivider}};
+            border-radius: 0px;
+            margin-bottom: 0px;
+        }
+        QListWidget#programList::item:hover {
+            background: {{itemHover}};
+        }
+        QListWidget#programList::item:selected {
+            background: {{itemSelect}};
+            border: 2px solid {{itemSelectBorder}};
+        }
+        QScrollBar:vertical {
+            background: {{scrollTrack}};
+            width: 16px;
+            margin: 0px;
+            border: 1px solid {{btnShadow}};
+        }
+        QScrollBar::handle:vertical {
+            background: {{btnFace}};
+            min-height: 20px;
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+        }
+        QScrollBar::handle:vertical:pressed {
+            background: {{btnPressed}};
+            border-top: 2px solid {{btnDarkShadow}};
+            border-left: 2px solid {{btnDarkShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        QProgressBar {
+            border-top: 1px solid {{btnShadow}};
+            border-left: 1px solid {{btnShadow}};
+            border-right: 1px solid {{btnLight}};
+            border-bottom: 1px solid {{btnLight}};
+            background: {{windowBg}};
+            max-height: 12px;
+        }
+        QProgressBar::chunk {
+            background: {{accent}};
+        }
+        QLabel#statusBar {
+            background: {{btnFace}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            padding: 3px 8px;
+            font-size: 11px;
+            color: {{textMain}};
+        }
+        QComboBox {
+            background: {{windowBg}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            border-radius: 0px;
+            padding: 4px 6px;
+            font-size: 12px;
+        }
+        QComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 18px;
+            background: {{btnFace}};
+            border-left: 1px solid {{btnShadow}};
+            border-top: 1px solid {{btnLight}};
+            border-bottom: 1px solid {{btnDarkShadow}};
+            border-right: 1px solid {{btnDarkShadow}};
+        }
+        QComboBox QAbstractItemView {
+            background: {{windowBg}};
+            color: {{textMain}};
+            selection-background-color: {{accent}};
+            selection-color: #ffffff;
+            border: 1px solid {{btnShadow}};
+        }
+        QDialog {
+            background: {{btnFace}};
+            color: {{textMain}};
+        }
+        QLabel#aboutTitle {
+            font-size: 17px;
+            font-weight: bold;
+            color: {{accent}};
+        }
+        QLabel#aboutVersion {
+            font-size: 12px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QLabel#aboutTagline, QLabel#aboutCopyright, QLabel#aboutLicense {
+            font-size: 11px;
+            color: {{textMuted}};
+        }
+        QFrame#aboutDivider {
+            border-top: 1px solid {{btnShadow}};
+            border-bottom: 1px solid {{btnLight}};
+            height: 2px;
+            max-height: 2px;
+        }
+        QFrame#aboutInfoBox {
+            background: {{sunkenBg}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            padding: 8px 12px;
+        }
+        QLabel#aboutHeading {
+            font-size: 11px;
+            font-weight: bold;
+            color: {{accent}};
+        }
+        QLabel#aboutUserInfo {
+            font-size: 11px;
+            font-weight: bold;
+            color: {{textMain}};
+        }
+        QLabel#aboutGplNotice {
+            font-size: 10px;
+            color: {{textMain}};
+        }
+        QLabel#aboutSysInfo {
+            font-size: 11px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: {{textMain}};
+        }
+    )");
+
+    s.replace("{{btnFace}}", btnFace);
+    s.replace("{{btnLight}}", btnLight);
+    s.replace("{{btnShadow}}", btnShadow);
+    s.replace("{{btnDarkShadow}}", btnDarkShadow);
+    s.replace("{{windowBg}}", windowBg);
+    s.replace("{{textMain}}", textMain);
+    s.replace("{{textMuted}}", textMuted);
+    s.replace("{{accent}}", accent);
+    s.replace("{{accentSecondary}}", accentSecondary);
+    s.replace("{{topNavGrad}}", topNavGrad);
+    s.replace("{{cardBorder}}", cardBorder);
+    s.replace("{{sunkenBg}}", sunkenBg);
+    s.replace("{{itemHover}}", itemHover);
+    s.replace("{{itemSelect}}", itemSelect);
+    s.replace("{{itemSelectBorder}}", itemSelectBorder);
+    s.replace("{{shortcutsBg}}", shortcutsBg);
+    s.replace("{{scrollTrack}}", scrollTrack);
+    s.replace("{{btnHover}}", btnHover);
+    s.replace("{{btnPressed}}", btnPressed);
+    s.replace("{{dangerHoverBg}}", dangerHoverBg);
+    s.replace("{{dangerHoverText}}", dangerHoverText);
+    s.replace("{{listDivider}}", listDivider);
+    s.replace("{{runningBg}}", runningBg);
+    s.replace("{{runningTop}}", runningTop);
+    s.replace("{{runningBottom}}", runningBottom);
+    s.replace("{{focusBorder}}", focusBorder);
+
+    return s;
+}
+
 class SettingsDialog : public QDialog {
-    QComboBox *language, *proton;
+    QComboBox *language, *theme, *proton;
     QLineEdit *prefix;
     QPushButton *browse;
     QLabel *message;
     QPushButton *save, *cancel;
     QProcess *process;
-    QString backend, originalLanguage, originalProton, originalPrefix, defaultPrefix;
+    QString backend, originalLanguage, originalTheme, originalProton, originalPrefix, defaultPrefix;
     bool saving = false, inFlight = false;
     QByteArray output;
     void run(const QStringList &args) {
         inFlight=true; output.clear();save->setEnabled(false);cancel->setEnabled(!saving);
-        language->setEnabled(!saving);proton->setEnabled(!saving);
+        language->setEnabled(!saving);theme->setEnabled(!saving);proton->setEnabled(!saving);
         prefix->setEnabled(!saving);browse->setEnabled(!saving);
         if (backend.endsWith(".py")) {
             process->start("/usr/bin/python3", QStringList{backend} + args);
@@ -43,7 +667,7 @@ class SettingsDialog : public QDialog {
     }
     void fail(const QString &error) {
         inFlight=false;message->setText(T(error));cancel->setEnabled(true);
-        language->setEnabled(true);proton->setEnabled(true);
+        language->setEnabled(true);theme->setEnabled(true);proton->setEnabled(true);
         prefix->setEnabled(true);browse->setEnabled(true);save->setEnabled(saving);
     }
     void finish(int code, QProcess::ExitStatus state) {
@@ -56,7 +680,10 @@ class SettingsDialog : public QDialog {
         }
         inFlight=false;
         if(saving) {
-            QSettings settings("WinBridge","Manager");settings.setValue("language",language->currentData().toString());settings.sync();
+            QSettings settings("WinBridge","Manager");
+            settings.setValue("language",language->currentData().toString());
+            settings.setValue("theme",theme->currentData().toString());
+            settings.sync();
             if(settings.status()!=QSettings::NoError){fail("Could not save settings.");return;}
             accept();return;
         }
@@ -80,6 +707,8 @@ class SettingsDialog : public QDialog {
     }
 public:
     bool languageChanged() const {return language->currentData().toString()!=originalLanguage;}
+    bool themeChanged() const {return theme->currentData().toString()!=originalTheme;}
+    QString selectedTheme() const {return theme->currentData().toString();}
     void reject() override {
         if(saving && inFlight) return;
         if(process->state()!=QProcess::NotRunning){process->kill();process->waitForFinished(1000);}
@@ -87,14 +716,28 @@ public:
     }
     SettingsDialog(const QString &path,QWidget *parent=nullptr):QDialog(parent),backend(path) {
         setWindowTitle(T("Settings"));setMinimumWidth(560);
+        originalLanguage=QSettings("WinBridge","Manager").value("language","en-US").toString();
+        originalTheme=QSettings("WinBridge","Manager").value("theme","classic").toString();
+        setStyleSheet(retroStyleSheet(originalTheme));
         auto *layout=new QVBoxLayout(this);layout->setContentsMargins(30,28,30,28);layout->setSpacing(18);
         auto label=[&](const QString &text,const char *id=nullptr){auto *l=new QLabel(T(text));l->setTextFormat(Qt::PlainText);l->setWordWrap(true);if(id)l->setObjectName(id);return l;};
         layout->addWidget(label("Settings","heading"));layout->addWidget(label("Personalize your workspace","muted"));layout->addSpacing(8);
+        
         layout->addWidget(label("Language"));language=new QComboBox;language->setObjectName("language");
         language->addItem("English","en-US");language->addItem("Norsk bokmål","no-NB");
-        originalLanguage=QSettings("WinBridge","Manager").value("language","en-US").toString();
         language->setCurrentIndex(qMax(0,language->findData(originalLanguage)));layout->addWidget(language);
         layout->addWidget(label("Choose the language used by WinBridge Manager.","muted"));layout->addSpacing(8);
+
+        layout->addWidget(label("Theme"));theme=new QComboBox;theme->setObjectName("theme");
+        theme->addItem(T("Classic Light (Windows 98)"),"classic");
+        theme->addItem(T("Retro Dark (Plus! Mystery)"),"dark");
+        theme->setCurrentIndex(qMax(0,theme->findData(originalTheme)));layout->addWidget(theme);
+        layout->addWidget(label("Choose your color scheme.","muted"));layout->addSpacing(8);
+
+        connect(theme, &QComboBox::currentIndexChanged, this, [this] {
+            setStyleSheet(retroStyleSheet(theme->currentData().toString()));
+        });
+
         layout->addWidget(label("Proton version"));proton=new QComboBox;proton->setObjectName("proton");layout->addWidget(proton);
         layout->addWidget(label("Used by all apps in your shared Windows environment.","muted"));layout->addSpacing(8);
 

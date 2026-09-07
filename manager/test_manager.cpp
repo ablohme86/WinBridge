@@ -62,6 +62,25 @@ private slots:
         QCOMPARE(QSettings("WinBridge","Manager").value("language").toString(),QString("no-NB"));
         QSettings("WinBridge","Manager").clear();
     }
+    void settingsThemePersists() {
+        QTemporaryDir dir;
+        QSettings::setPath(QSettings::NativeFormat,QSettings::UserScope,dir.path());
+        QString script=dir.filePath("backend.py");QFile f(script);QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("import json\nprint(json.dumps({'selected':'','versions':[{'name':'Proton Test','path':'/test/proton'}]}))\n");f.close();
+        SettingsDialog dialog(script);dialog.show();
+        auto *save=dialog.findChild<QPushButton*>("primary");
+        auto *theme=dialog.findChild<QComboBox*>("theme");
+        QVERIFY(theme!=nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(),5000);
+        QCOMPARE(theme->count(),2);
+        dialog.grab().save("/tmp/settings_light.png");
+        theme->setCurrentIndex(1);
+        dialog.grab().save("/tmp/settings_dark.png");
+        save->click();
+        QTRY_COMPARE_WITH_TIMEOUT(dialog.result(),int(QDialog::Accepted),5000);
+        QCOMPARE(QSettings("WinBridge","Manager").value("theme").toString(),QString("dark"));
+        QSettings("WinBridge","Manager").clear();
+    }
     void settingsPrefixConfiguresBackend() {
         QTemporaryDir dir;
         QString script=dir.filePath("backend.py"), calls=dir.filePath("calls");
@@ -191,6 +210,62 @@ private slots:
         QString recorded = QString::fromUtf8(callFile.readAll());
         QVERIFY(recorded.contains("kill"));
         QVERIFY(recorded.contains("--key run1"));
+    }
+    void itemListUninstallButton() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
+        QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(("import json,sys\nfrom pathlib import Path\np=Path("+QString("'%1'").arg(calls)+")\nargs=' '.join(sys.argv[1:])\np.write_text((p.read_text() if p.exists() else '') + args + '\\n')\nprint(json.dumps({'prefix':'" + dir.path() + "','proton':'Test','ready':True,'removed':True,'programs':([] if sys.argv[1]=='uninstall' else [{'key':'alpha','name':'Alpha App'}])}))\n").toUtf8()); file.close();
+        Manager window(script); window.show();
+        auto *list = window.findChild<QListWidget*>("programList");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(), 1, 5000);
+        auto *itemUninstall = window.findChild<QPushButton*>("itemUninstall");
+        QVERIFY(itemUninstall != nullptr);
+        QVERIFY(itemUninstall->isEnabled());
+        QTimer::singleShot(20, []() {
+            auto *box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (box) {
+                for (auto *b : box->buttons()) {
+                    if (box->buttonRole(b) == QMessageBox::AcceptRole) {
+                        b->click();
+                        break;
+                    }
+                }
+            }
+        });
+        itemUninstall->click();
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(), 0, 5000);
+        QFile callFile(calls);
+        QVERIFY(callFile.open(QIODevice::ReadOnly));
+        QString recorded = QString::fromUtf8(callFile.readAll());
+        QVERIFY(recorded.contains("uninstall"));
+        QVERIFY(recorded.contains("--key alpha"));
+    }
+    void aboutDialogOpens() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py");
+        QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("import json\nprint(json.dumps({'prefix':'/tmp/test','proton':'Test Proton','ready':True,'programs':[{'key':'a','name':'App'}]}))\n");
+        file.close();
+        Manager window(script); window.show();
+        auto *list = window.findChild<QListWidget*>("programList");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(), 1, 5000);
+        auto *aboutBtn = window.findChild<QPushButton*>("aboutButton");
+        QVERIFY(aboutBtn != nullptr);
+        QVERIFY(aboutBtn->isEnabled());
+        bool verifiedDialog = false;
+        QTimer::singleShot(50, [&]() {
+            auto *dlg = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (dlg) {
+                verifiedDialog = true;
+                dlg->grab().save("/tmp/about_dialog.png");
+                auto *okBtn = dlg->findChild<QPushButton*>("aboutOk");
+                if (okBtn) okBtn->click();
+                else dlg->accept();
+            }
+        });
+        aboutBtn->click();
+        QVERIFY(verifiedDialog);
     }
 };
 QTEST_MAIN(ManagerTest)

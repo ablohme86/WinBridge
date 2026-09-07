@@ -91,6 +91,20 @@
     "Windows C: Drive": "Windows C: Drive",
     "Active Now": "Active Now",
     "Inactive": "Inactive",
-    "Open C: Drive": "Open C: Drive"
+    "Open C: Drive": "Open C: Drive",
+    "About": "About",
+    "About WinBridge Manager": "About WinBridge Manager",
+    "Version 1.0": "Version 1.0",
+    "Windows Application Manager for Linux": "Windows Application Manager for Linux",
+    "Licensed under the GNU General Public License v3.": "Licensed under the GNU General Public License v3.",
+    "This product is licensed to:": "This product is licensed to:",
+    "Everyone!": "Everyone!",
+    "Free & Open Source Software": "Free & Open Source Software",
+    "Physical environment:": "Physical environment:",
+    "OK": "OK",
+    "Theme": "Theme",
+    "Choose your color scheme.": "Choose your retro Windows color scheme.",
+    "Classic Light (Windows 98)": "Classic Light (Windows 98)",
+    "Retro Dark (Plus! Mystery)": "Retro Dark (Plus! Mystery)"
   }
 }

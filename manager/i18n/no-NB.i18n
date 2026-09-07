@@ -91,6 +91,20 @@
     "Windows C: Drive": "Windows C:-stasjon",
     "Active Now": "Aktiv nå",
     "Inactive": "Inaktiv",
-    "Open C: Drive": "Åpne C:-stasjon"
+    "Open C: Drive": "Åpne C:-stasjon",
+    "About": "Om",
+    "About WinBridge Manager": "Om WinBridge Manager",
+    "Version 1.0": "Versjon 1.0",
+    "Windows Application Manager for Linux": "Windows-programbehandler for Linux",
+    "Licensed under the GNU General Public License v3.": "Lisensiert under GNU General Public License v3.",
+    "This product is licensed to:": "Dette produktet er lisensiert til:",
+    "Everyone!": "Alle sammen!",
+    "Free & Open Source Software": "Fri og åpen kildekode",
+    "Physical environment:": "Fysisk miljø:",
+    "OK": "OK",
+    "Theme": "Tema",
+    "Choose your color scheme.": "Velg fargetema for WinBridge Manager.",
+    "Classic Light (Windows 98)": "Klassisk lys (Windows 98)",
+    "Retro Dark (Plus! Mystery)": "Mørk retro (Plus! Mystery)"
   }
 }
