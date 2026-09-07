@@ -488,7 +488,11 @@ QJsonObject operate(
         if (matches.size() != 1) {
             throw std::runtime_error("The app no longer exists, or its ID is ambiguous. Refresh the library.");
         }
-        launch(uninstallerExe, protonPath, roots, libs, {"--remove", matches[0].first}, prefix, false, "runinprefix");
+        QString appKey = matches[0].first;
+        QString appName = matches[0].second;
+        auto metaBefore = getProgramRegistryMeta(prefix).value(appKey.toLower());
+
+        launch(uninstallerExe, protonPath, roots, libs, {"--remove", appKey}, prefix, false, "runinprefix");
         programList = queryPrograms();
         bool stillExists = false;
         for (const auto &p : programList) {
@@ -498,6 +502,12 @@ QJsonObject operate(
             }
         }
         result["removed"] = !stillExists;
+        if (!stillExists) {
+            removeProgramShortcuts(prefix, appKey, appName, metaBefore);
+            cleanupOrphanedShortcuts(prefix);
+        }
+    } else if (action == "list") {
+        cleanupOrphanedShortcuts(prefix);
     }
 
     auto icons = programIcons(prefix);

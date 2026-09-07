@@ -4,7 +4,9 @@
 
 WinBridge lets you open Windows `.exe` files from your Linux desktop using an installed Proton version. Choose Proton once, then run installers and portable apps in one shared Windows environment.
 
-**WinBridge Manager** is a native C++17 / Qt 6 desktop app for browsing installed programs, searching your library, and opening each program's uninstall wizard. Its dark interface includes a Settings window for language, Proton selection, and the Proton / Wine install directory.
+**WinBridge Manager** is a native C++17 / Qt 6 desktop app for browsing installed programs, searching your library, and managing shortcuts and uninstallers. It features an authentic retro Windows aesthetic with both **Classic Light (Windows 98)** and **Retro Dark (Plus! Mystery)** themes.
+
+![WinBridge Manager](assets/winbridge-manager.png)
 
 ## Features
 
@@ -12,7 +14,8 @@ WinBridge lets you open Windows `.exe` files from your Linux desktop using an in
 - Discover Proton in Steam libraries and custom builds such as GE-Proton.
 - Reuse one Windows environment across apps, including simultaneous launches.
 - Import shortcuts exported by Proton into the Linux application menu and desktop.
-- Browse and uninstall registered Windows programs in WinBridge Manager.
+- Browse and uninstall registered Windows programs in WinBridge Manager with automatic shortcut and icon cleanup.
+- Authentic Windows 9x retro interface with Classic Light and Retro Dark theme support.
 - Choose English or Norwegian Bokmål, an installed Proton version, and the install directory in Settings.
 
 Proton and its required Steam Linux Runtime must already be installed. Compatibility varies between Windows programs. Proton Experimental resolved the Battle.net Agent issue observed during development.
@@ -71,9 +74,28 @@ Open **WinBridge Manager** from your application menu or run:
 winbridge-manager
 ```
 
+![WinBridge Manager - Classic Light](assets/winbridge-manager.png)
+
+<details>
+<summary><b>Click to view Retro Dark Mode (Plus! Mystery)</b></summary>
+
+![WinBridge Manager - Retro Dark](assets/winbridge-manager-dark.png)
+
+</details>
+
 The native C++ Qt 6 interface communicates with the compiled `winbridge-backend` binary. Listing and uninstalling use Proton's `runinprefix` mode, so management tools do not wait for unrelated Windows apps to close.
 
-Only programs registered with a Windows uninstaller appear in the library. Portable apps are not automatically registered. Uninstallers decide which application data to retain, and old Linux shortcuts may remain after uninstalling an app. Manager does not manually delete application folders.
+### Key Manager Features
+
+- **Program Library & Search**: Displays all Windows programs registered in your shared Proton prefix, complete with high-resolution icons extracted directly from the applications. Quickly filter through your library using the retro search bar.
+- **Direct Windows Uninstaller Integration**: Run an application's native uninstaller wizard by clicking **Uninstall** directly on any list item or within the inspector panel.
+- **Automated Shortcut & Icon Pruning**: When a program is uninstalled, WinBridge automatically cleans up its `.desktop` launchers, purges all icon resolutions from `proton_shortcuts/icons/` and `~/.local/share/icons/hicolor/`, and prunes orphaned links.
+- **Desktop & Menu Shortcut Toggles**: Expand any app entry to independently enable or disable its Linux desktop launcher or application menu entry without modifying files manually.
+- **Process Detection & Task Termination**: Live monitoring identifies running Windows executables. When an app is active, a green status badge and a **Kill app** button allow you to forcibly terminate frozen processes cleanly.
+- **One-Click C: Drive Access**: Click **Open C: Drive** to immediately inspect your prefix's Windows file hierarchy in your default desktop file manager.
+- **Themes & Appearance**: Choose between **Classic Light (Windows 98)** and **Retro Dark (Plus! Mystery)** with live preview directly in the Settings dialog, or launch with `--theme classic` / `--theme dark`.
+- **Bilingual Localization**: Built-in support for English (`en-US`) and Norwegian Bokmål (`no-NB`).
+- **Retro About Dialog**: Classic Windows-style "About" window with copyright information, version details, and the GNU General Public License (GPLv3) legal notice.
 
 ## Shared environment and data
 

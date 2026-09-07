@@ -83,4 +83,19 @@ QStringList importShortcuts(
     const QString &desktopDir = ""
 );
 
+void removeProgramShortcuts(
+    const QString &prefix,
+    const QString &programKey,
+    const QString &programName = "",
+    const ProgramRegistryMeta &meta = ProgramRegistryMeta(),
+    const QString &customDataDir = "",
+    const QString &customDesktopDir = ""
+);
+
+void cleanupOrphanedShortcuts(
+    const QString &prefix,
+    const QString &customDataDir = "",
+    const QString &customDesktopDir = ""
+);
+
 } // namespace WinBridge

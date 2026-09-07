@@ -236,6 +236,62 @@ private slots:
         QCOMPARE(readImg.width(), 16);
         QCOMPARE(readImg.height(), 16);
     }
+
+    void testRemoveProgramShortcutsAndCleanup() {
+        QTemporaryDir tmp;
+        QString pfx = tmp.path();
+        QString sourceDir = pfx + "/pfx/drive_c/proton_shortcuts";
+        QDir().mkpath(sourceDir + "/icons/48x48/apps");
+
+        QImage testImg(48, 48, QImage::Format_ARGB32);
+        testImg.fill(Qt::red);
+        QVERIFY(testImg.save(sourceDir + "/icons/48x48/apps/app_icon.0.png"));
+        // Create an orphaned uninstaller icon
+        QVERIFY(testImg.save(sourceDir + "/icons/48x48/apps/unins000.0.png"));
+
+        QDir().mkpath(pfx + "/pfx/drive_c/Games/DemoApp");
+        QFile exeFile(pfx + "/pfx/drive_c/Games/DemoApp/demo.exe");
+        QVERIFY(exeFile.open(QIODevice::WriteOnly));
+        exeFile.write("MZ");
+        exeFile.close();
+
+        QFile scFile(sourceDir + "/DemoApp.desktop");
+        QVERIFY(scFile.open(QIODevice::WriteOnly));
+        scFile.write(QString("[Desktop Entry]\nType=Application\nName=Demo App\nExec=%1\nIcon=app_icon.0\n")
+            .arg(desktopQuote(R"(C:\Games\DemoApp\demo.exe)")).toUtf8());
+        scFile.close();
+
+        QString customData = tmp.filePath("data");
+        QString customDesktop = tmp.filePath("desktop");
+        QDir().mkpath(customData + "/applications");
+        QDir().mkpath(customDesktop);
+
+        importShortcuts(pfx, "dummy", tmp.filePath("winbridge"), customData, customDesktop);
+
+        QVERIFY(QFile::exists(sourceDir + "/DemoApp.desktop"));
+        QVERIFY(QFile::exists(sourceDir + "/icons/48x48/apps/app_icon.0.png"));
+        QVERIFY(QFile::exists(sourceDir + "/icons/48x48/apps/unins000.0.png"));
+
+        // Simulate program uninstall
+        ProgramRegistryMeta meta;
+        meta.key = "demo_key";
+        meta.name = "Demo App";
+        meta.loc = R"(C:\Games\DemoApp)";
+        removeProgramShortcuts(pfx, "demo_key", "Demo App", meta, customData, customDesktop);
+        cleanupOrphanedShortcuts(pfx, customData, customDesktop);
+
+        // Verify .desktop in proton_shortcuts is gone
+        QVERIFY(!QFile::exists(sourceDir + "/DemoApp.desktop"));
+        // Verify app icon in proton_shortcuts is gone
+        QVERIFY(!QFile::exists(sourceDir + "/icons/48x48/apps/app_icon.0.png"));
+        // Verify orphaned uninstaller icon in proton_shortcuts is also gone
+        QVERIFY(!QFile::exists(sourceDir + "/icons/48x48/apps/unins000.0.png"));
+        // Verify Linux .desktop in applications and desktop are gone
+        QDir appDir(customData + "/applications");
+        QCOMPARE(appDir.entryList({"winbridge-*.desktop"}, QDir::Files).size(), 0);
+        QDir deskDir(customDesktop);
+        QCOMPARE(deskDir.entryList({"winbridge-*.desktop"}, QDir::Files).size(), 0);
+    }
 };
 
 QTEST_MAIN(CoreTests)

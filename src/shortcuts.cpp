@@ -18,6 +18,7 @@
 
 #include "shortcuts.h"
 #include "shared_space.h"
+#include <functional>
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -224,6 +225,18 @@ static QMap<QString, QString> parseDesktopFile(const QString &path) {
     return entry;
 }
 
+static bool isUninstallerShortcut(const QString &name, const QString &exec) {
+    QString n = name.toLower();
+    QString e = exec.toLower();
+    if (n.contains("uninstall") || n.contains("avinstaller")) {
+        return true;
+    }
+    if (e.contains("unins") || e.contains("unwise") || e.contains("isuninst")) {
+        return true;
+    }
+    return false;
+}
+
 QList<ShortcutInfo> loadShortcuts(const QString &prefix, const QString &customDataDir, const QString &customDesktop) {
     QString pfx = QDir::cleanPath(prefix);
     QString data = customDataDir.isEmpty() ? (qEnvironmentVariable("XDG_DATA_HOME").isEmpty() ? QDir::homePath() + "/.local/share" : qEnvironmentVariable("XDG_DATA_HOME")) : customDataDir;
@@ -242,6 +255,8 @@ QList<ShortcutInfo> loadShortcuts(const QString &prefix, const QString &customDa
         if (target.isEmpty()) continue;
 
         QString name = entry.value("Name", QFileInfo(file).completeBaseName());
+        if (isUninstallerShortcut(name, execVal)) continue;
+
         QByteArray idData = pfx.toUtf8() + '\0' + file.toUtf8();
         QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
         QString filename = QString("winbridge-%1.desktop").arg(identity);
@@ -509,6 +524,8 @@ QStringList importShortcuts(
         if (target.isEmpty()) continue;
 
         QString name = entry.value("Name", QFileInfo(file).completeBaseName());
+        if (isUninstallerShortcut(name, execVal)) continue;
+
         QByteArray idData = pfx.toUtf8() + '\0' + file.toUtf8();
         QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
         QString filename = QString("winbridge-%1.desktop").arg(identity);
@@ -655,6 +672,350 @@ QStringList importShortcuts(
     }
 
     return imported;
+}
+
+static void removeShortcutIcons(const QString &sourceDir, const QString &iconName) {
+    if (iconName.isEmpty()) return;
+    QString clean = iconName.endsWith(".png", Qt::CaseInsensitive) ? iconName.left(iconName.length() - 4) : iconName;
+    QDir iconsDir(sourceDir + "/icons");
+    if (!iconsDir.exists()) return;
+
+    for (const QString &sub : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        QDir appsDir(iconsDir.filePath(sub + "/apps"));
+        if (appsDir.exists()) {
+            for (const QString &img : appsDir.entryList({clean + ".png", clean + "*.png"}, QDir::Files)) {
+                QFile::remove(appsDir.filePath(img));
+            }
+            if (appsDir.entryList(QDir::Files).isEmpty()) {
+                appsDir.rmdir(".");
+            }
+        }
+        QDir subDir(iconsDir.filePath(sub));
+        if (subDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()) {
+            iconsDir.rmdir(sub);
+        }
+    }
+
+    QDir srcDir(sourceDir);
+    for (const QString &loose : srcDir.entryList({clean + ".png", clean + ".ico", clean + ".xpm"}, QDir::Files)) {
+        QFile::remove(srcDir.filePath(loose));
+    }
+}
+
+void removeProgramShortcuts(
+    const QString &prefix,
+    const QString &programKey,
+    const QString &programName,
+    const ProgramRegistryMeta &meta,
+    const QString &customDataDir,
+    const QString &customDesktopDir
+) {
+    QString pfx = QDir::cleanPath(prefix);
+    QString source = pfx + "/pfx/drive_c/proton_shortcuts";
+    QDir srcDir(source);
+    QString data = customDataDir.isEmpty() ? (qEnvironmentVariable("XDG_DATA_HOME").isEmpty() ? QDir::homePath() + "/.local/share" : qEnvironmentVariable("XDG_DATA_HOME")) : customDataDir;
+    QString desktop = customDesktopDir.isEmpty() ? desktopDir() : customDesktopDir;
+
+    QSet<QString> desktopFilesToRemove;
+    QSet<QString> iconNamesToRemove;
+    QSet<QString> identitiesToRemove;
+
+    QJsonObject config = readShortcutsConfig();
+    bool configChanged = false;
+
+    QString pLoc = meta.loc.toLower().replace('\\', '/');
+    while (pLoc.endsWith('/')) pLoc.chop(1);
+    QString pGrp = meta.group.toLower();
+    QString pName = programName.toLower();
+    QString pKey = programKey.toLower();
+
+    for (const QString &f : srcDir.entryList({"*.desktop"}, QDir::Files)) {
+        QString fPath = srcDir.filePath(f);
+        auto entry = parseDesktopFile(fPath);
+        QString scName = entry.value("Name").toLower();
+        QString scExec = entry.value("Exec").replace('\\', '/').toLower();
+        QString scPath = entry.value("Path").replace('\\', '/').toLower();
+        QString fLower = f.toLower();
+
+        bool match = false;
+        if (!pLoc.isEmpty() && (scPath.contains(pLoc) || scExec.contains(pLoc))) match = true;
+        else if (!pGrp.isEmpty() && (scExec.contains(pGrp) || scPath.contains(pGrp) || fLower.contains(pGrp))) match = true;
+        else if (!pName.isEmpty() && (scExec.contains(pName) || scPath.contains(pName) || scName == pName || scName.contains(pName) || pName.contains(scName))) match = true;
+        else if (!pKey.isEmpty() && (scExec.contains(pKey) || scPath.contains(pKey) || fLower.contains(pKey))) match = true;
+
+        if (match) {
+            desktopFilesToRemove.insert(f);
+            QString icon = entry.value("Icon");
+            if (!icon.isEmpty()) {
+                iconNamesToRemove.insert(icon);
+            }
+            QByteArray idData = pfx.toUtf8() + '\0' + f.toUtf8();
+            QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
+            identitiesToRemove.insert(identity);
+        }
+    }
+
+    for (const QString &f : desktopFilesToRemove) {
+        QFile::remove(srcDir.filePath(f));
+    }
+
+    for (const QString &iconVal : iconNamesToRemove) {
+        removeShortcutIcons(source, iconVal);
+    }
+
+    if (!meta.icon.isEmpty()) {
+        QString baseIcon = QFileInfo(meta.icon).fileName();
+        removeShortcutIcons(source, baseIcon);
+    }
+
+    for (const QString &id : identitiesToRemove) {
+        QFile::remove(data + "/applications/winbridge-" + id + ".desktop");
+        if (!desktop.isEmpty()) {
+            QFile::remove(desktop + "/winbridge-" + id + ".desktop");
+        }
+        for (int s : {16, 22, 24, 32, 48, 64, 128, 256, 512}) {
+            QFile::remove(QString("%1/icons/hicolor/%2x%2/apps/winbridge-%3.png").arg(data).arg(s).arg(id));
+        }
+        if (config.contains(id)) {
+            config.remove(id);
+            configChanged = true;
+        }
+    }
+
+    if (configChanged) {
+        saveShortcutsConfig(config);
+    }
+
+    QProcess updateProc;
+    updateProc.start("update-desktop-database", {data + "/applications"});
+    updateProc.waitForFinished(1000);
+}
+
+void cleanupOrphanedShortcuts(
+    const QString &prefix,
+    const QString &customDataDir,
+    const QString &customDesktopDir
+) {
+    QString pfx = QDir::cleanPath(prefix);
+    QString source = pfx + "/pfx/drive_c/proton_shortcuts";
+    QDir srcDir(source);
+    if (!srcDir.exists()) return;
+
+    QString driveC = pfx + "/pfx/drive_c";
+    QString data = customDataDir.isEmpty() ? (qEnvironmentVariable("XDG_DATA_HOME").isEmpty() ? QDir::homePath() + "/.local/share" : qEnvironmentVariable("XDG_DATA_HOME")) : customDataDir;
+    QString desktop = customDesktopDir.isEmpty() ? desktopDir() : customDesktopDir;
+
+    QJsonObject config = readShortcutsConfig();
+    bool configChanged = false;
+
+    QSet<QString> activeIconBases;
+
+    std::function<bool(const QString&, int)> checkLnkTargetAlive;
+    checkLnkTargetAlive = [&](const QString &lnkPath, int depth) -> bool {
+        if (depth > 2) return false;
+        QFile lnkFile(lnkPath);
+        if (!lnkFile.open(QIODevice::ReadOnly)) return false;
+        QByteArray lnkData = lnkFile.readAll();
+        lnkFile.close();
+
+        static QRegularExpression winPathRegex(R"([a-zA-Z]:\\[^\x00-\x1f"<>|?*]+)");
+        QString asciiStr = QString::fromLatin1(lnkData);
+        auto it = winPathRegex.globalMatch(asciiStr);
+        bool foundSpecificTarget = false;
+        bool specificTargetAlive = false;
+
+        auto evaluatePath = [&](const QString &winPath) {
+            QString lower = winPath.toLower();
+            // Check for game/app target files
+            if (lower.endsWith(".exe") || lower.endsWith(".isu") || lower.endsWith(".bat") || lower.endsWith(".cmd")) {
+                // Ignore system executables (uninstaller, winhelp, cmd, etc.) when determining if the app itself is alive
+                QString norm = QString(winPath).replace('\\', '/');
+                QString base = QFileInfo(norm).fileName().toLower();
+                if (base.contains("unins") || base.contains("unwise") || base.contains("isuninst") ||
+                    base == "winhelp.exe" || base == "winhlp32.exe" || base == "hh.exe" ||
+                    base == "cmd.exe" || base == "command.com" || base == "notepad.exe" || base == "regedit.exe") {
+                    return;
+                }
+                foundSpecificTarget = true;
+                QString rel = norm.mid(3);
+                QString fullPath = driveC + "/" + rel;
+                if (QFile::exists(fullPath)) {
+                    specificTargetAlive = true;
+                } else {
+                    QFileInfo fi(fullPath);
+                    QDir dir = fi.dir();
+                    if (dir.exists()) {
+                        QString bl = fi.fileName().toLower();
+                        for (const QString &cand : dir.entryList(QDir::Files)) {
+                            if (cand.toLower() == bl) {
+                                specificTargetAlive = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        while (it.hasNext()) {
+            evaluatePath(it.next().captured(0));
+        }
+
+        if (!foundSpecificTarget) {
+            QString utf16Str = QString::fromUtf16(reinterpret_cast<const char16_t*>(lnkData.constData()), lnkData.size() / 2);
+            auto it16 = winPathRegex.globalMatch(utf16Str);
+            while (it16.hasNext()) {
+                evaluatePath(it16.next().captured(0));
+            }
+        }
+
+        if (depth > 0) {
+            return foundSpecificTarget && specificTargetAlive;
+        }
+
+        if (!foundSpecificTarget) {
+            QDir dir = QFileInfo(lnkPath).dir();
+            bool hasLivingSibling = false;
+            for (const QString &sibling : dir.entryList({"*.lnk"}, QDir::Files)) {
+                if (dir.filePath(sibling) == lnkPath) continue;
+                if (checkLnkTargetAlive(dir.filePath(sibling), depth + 1)) {
+                    hasLivingSibling = true;
+                    break;
+                }
+            }
+            if (!hasLivingSibling) {
+                return false;
+            }
+        }
+
+        if (foundSpecificTarget && !specificTargetAlive) {
+            return false;
+        }
+        return true;
+    };
+
+    for (const QString &file : srcDir.entryList({"*.desktop"}, QDir::Files, QDir::Name)) {
+        QString scPath = srcDir.filePath(file);
+        auto entry = parseDesktopFile(scPath);
+        QString execVal = entry.value("Exec");
+        QString target = shortcutTarget(execVal, pfx);
+        QString iconName = entry.value("Icon");
+
+        bool dead = false;
+        if (target.isEmpty() || !QFile::exists(target)) {
+            dead = true;
+        } else if (target.endsWith(".lnk", Qt::CaseInsensitive)) {
+            if (!checkLnkTargetAlive(target, 0)) {
+                dead = true;
+            }
+        }
+
+        QByteArray idData = pfx.toUtf8() + '\0' + file.toUtf8();
+        QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
+
+        if (dead) {
+            QFile::remove(scPath);
+            removeShortcutIcons(source, iconName);
+
+            QFile::remove(data + "/applications/winbridge-" + identity + ".desktop");
+            if (!desktop.isEmpty()) {
+                QFile::remove(desktop + "/winbridge-" + identity + ".desktop");
+            }
+            for (int s : {16, 22, 24, 32, 48, 64, 128, 256, 512}) {
+                QFile::remove(QString("%1/icons/hicolor/%2x%2/apps/winbridge-%3.png").arg(data).arg(s).arg(identity));
+            }
+            if (config.contains(identity)) {
+                config.remove(identity);
+                configChanged = true;
+            }
+        } else {
+            if (!iconName.isEmpty()) {
+                QString clean = iconName.endsWith(".png", Qt::CaseInsensitive) ? iconName.left(iconName.length() - 4) : iconName;
+                activeIconBases.insert(clean.toLower());
+                activeIconBases.insert(iconName.toLower());
+            }
+        }
+    }
+
+    QDir iconsDir(source + "/icons");
+    if (iconsDir.exists()) {
+        for (const QString &sub : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QDir appsDir(iconsDir.filePath(sub + "/apps"));
+            if (appsDir.exists()) {
+                for (const QString &img : appsDir.entryList({"*.png"}, QDir::Files)) {
+                    QString clean = img.endsWith(".png", Qt::CaseInsensitive) ? img.left(img.length() - 4) : img;
+                    if (!activeIconBases.contains(clean.toLower()) && !activeIconBases.contains(img.toLower())) {
+                        QFile::remove(appsDir.filePath(img));
+                    }
+                }
+                if (appsDir.entryList(QDir::Files).isEmpty()) {
+                    appsDir.rmdir(".");
+                }
+            }
+            QDir subDir(iconsDir.filePath(sub));
+            if (subDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()) {
+                iconsDir.rmdir(sub);
+            }
+        }
+    }
+
+    for (const QString &loose : srcDir.entryList({"*.png", "*.ico", "*.xpm"}, QDir::Files)) {
+        QString clean = loose;
+        int dot = clean.lastIndexOf('.');
+        if (dot > 0) clean = clean.left(dot);
+        if (!activeIconBases.contains(clean.toLower()) && !activeIconBases.contains(loose.toLower())) {
+            QFile::remove(srcDir.filePath(loose));
+        }
+    }
+
+    QDir appDir(data + "/applications");
+    for (const QString &f : appDir.entryList({"winbridge-*.desktop"}, QDir::Files)) {
+        if (f == "winbridge-manager.desktop") continue;
+        QString p = appDir.filePath(f);
+        auto entry = parseDesktopFile(p);
+        QString execVal = entry.value("Exec");
+
+        QString target;
+        static QRegularExpression lastArgRegex(R"("[^"]+"|\S+)");
+        auto matchIt = lastArgRegex.globalMatch(execVal);
+        QString lastToken;
+        while (matchIt.hasNext()) {
+            lastToken = matchIt.next().captured(0);
+        }
+        if (lastToken.startsWith('"') && lastToken.endsWith('"') && lastToken.length() >= 2) {
+            target = lastToken.mid(1, lastToken.length() - 2);
+        } else {
+            target = lastToken;
+        }
+
+        if (!target.isEmpty()) {
+            bool dead = !QFile::exists(target);
+            if (!dead && target.endsWith(".lnk", Qt::CaseInsensitive)) {
+                dead = !checkLnkTargetAlive(target, 0);
+            }
+            if (!dead && isUninstallerShortcut(entry.value("Name"), execVal)) {
+                dead = true;
+            }
+            if (dead) {
+                QFile::remove(p);
+                QString id = f.mid(10, f.length() - 18);
+                if (!desktop.isEmpty()) {
+                    QFile::remove(desktop + "/" + f);
+                }
+                for (int s : {16, 22, 24, 32, 48, 64, 128, 256, 512}) {
+                    QFile::remove(QString("%1/icons/hicolor/%2x%2/apps/winbridge-%3.png").arg(data).arg(s).arg(id));
+                }
+                if (config.contains(id)) {
+                    config.remove(id);
+                    configChanged = true;
+                }
+            }
+        }
+    }
+
+    if (configChanged) {
+        saveShortcutsConfig(config);
+    }
 }
 
 } // namespace WinBridge

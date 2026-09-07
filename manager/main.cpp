@@ -574,6 +574,8 @@ public:
         dl->addWidget(detailName);
 
         detailText = label(T("Your Windows apps, all in one place."), "muted"); detailText->setWordWrap(true); detailText->setAlignment(Qt::AlignCenter);
+        detailText->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+        detailText->setMinimumHeight(60);
         dl->addWidget(detailText);
 
         dl->addStretch();
@@ -694,7 +696,7 @@ int main(int argc, char **argv) {
     QApplication app(argc,argv);
     app.setWindowIcon(QIcon(":/assets/winbridge.png"));
     app.setApplicationName("WinBridge Manager"); app.setDesktopFileName("winbridge-manager");
-    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.addOption({"demo","Populate with demo data for preview"});parser.addOption({"snapshot","Render a live library snapshot and exit","path"});parser.addOption({"theme","Theme to use: classic or dark","theme"});parser.process(app);
+    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.addOption({"demo","Populate with demo data for preview"});parser.addOption({"snapshot","Render a live library snapshot and exit","path"});parser.addOption({"theme","Theme to use: classic or dark","theme"});parser.addOption({"lang","Language to use: en-US or no-NB","lang"});parser.process(app);
     QString backend=parser.value("backend");
     if(parser.isSet("theme")) {
         QSettings("WinBridge", "Manager").setValue("theme", parser.value("theme"));
@@ -718,10 +720,21 @@ int main(int argc, char **argv) {
     }
     int exitCode;
     do {
-    I18n::load(QSettings("WinBridge", "Manager").value("language", "en-US").toString());
+    QString lang = parser.isSet("lang") ? parser.value("lang") : QSettings("WinBridge", "Manager").value("language", "en-US").toString();
+    I18n::load(lang);
     Manager window(backend,parser.isSet("screenshot"),parser.isSet("demo"));window.show();
     if(parser.isSet("screenshot"))QTimer::singleShot(500,&app,[&]{bool ok=window.grab().save(parser.value("screenshot"));app.exit(ok?0:1);});
-    else if(parser.isSet("snapshot"))QTimer::singleShot(1800,&app,[&]{bool ok=window.grab().save(parser.value("snapshot"));app.exit(ok?0:1);});
+    else if(parser.isSet("snapshot"))QTimer::singleShot(2200,&app,[&]{
+        if (auto *lw = window.findChild<QListWidget*>()) {
+            if (lw->count() > 2) {
+                lw->setCurrentRow(2);
+            } else if (lw->count() > 0) {
+                lw->setCurrentRow(0);
+            }
+        }
+        bool ok=window.grab().save(parser.value("snapshot"));
+        app.exit(ok?0:1);
+    });
     exitCode = app.exec();
     } while (exitCode == 42);
     return exitCode;
