@@ -4,7 +4,7 @@ project(WinBridge VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -17,7 +17,7 @@ add_library(winbridge_core STATIC
     src/launcher.cpp
     src/manager_backend.cpp
 )
-target_link_libraries(winbridge_core PUBLIC Qt6::Core)
+target_link_libraries(winbridge_core PUBLIC Qt6::Core Qt6::Gui)
 
 add_executable(winbridge src/winbridge_main.cpp)
 target_link_libraries(winbridge PRIVATE winbridge_core Qt6::Core)

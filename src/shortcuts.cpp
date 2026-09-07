@@ -23,9 +23,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonDocument>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <QTemporaryFile>
 #include <sys/stat.h>
 
@@ -182,10 +184,11 @@ QString shortcutIconPath(const QString &sourceDir, const QString &iconName) {
     QDir iconsDir(sourceDir + "/icons");
     if (!iconsDir.exists()) return QString();
 
+    QString cleanIcon = iconName.endsWith(".png", Qt::CaseInsensitive) ? iconName.left(iconName.length() - 4) : iconName;
     QString bestPath;
     int maxRes = -1;
     for (const QString &sub : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        QString p = iconsDir.filePath(sub + "/apps/" + iconName + ".png");
+        QString p = iconsDir.filePath(sub + "/apps/" + cleanIcon + ".png");
         QFileInfo fi(p);
         if (fi.isFile()) {
             int res = 0;
@@ -244,7 +247,16 @@ QList<ShortcutInfo> loadShortcuts(const QString &prefix, const QString &customDa
         QString filename = QString("winbridge-%1.desktop").arg(identity);
 
         QString iconName = entry.value("Icon");
-        QString icon = shortcutIconPath(source, iconName);
+        QString hicolorPath = QString("%1/icons/hicolor/48x48/apps/winbridge-%2.png").arg(data, identity);
+        QString icon;
+        if (QFile::exists(hicolorPath)) {
+            icon = hicolorPath;
+        } else {
+            icon = shortcutIconPath(source, iconName);
+            if (icon.isEmpty()) {
+                icon = QString("winbridge-%1").arg(identity);
+            }
+        }
 
         QJsonObject pref = config.value(identity).toObject();
         QString appFile = data + "/applications/" + filename;
@@ -428,7 +440,9 @@ QJsonObject toggleShortcut(
     const QVariant &desktop,
     const QVariant &menu,
     const QString &launcher,
-    const QString &proton
+    const QString &proton,
+    const QString &customDataDir,
+    const QString &customDesktopDir
 ) {
     QString pfx = QDir::cleanPath(prefix);
     QJsonObject config = readShortcutsConfig();
@@ -445,8 +459,13 @@ QJsonObject toggleShortcut(
 
     QString effLauncher = launcher;
     if (effLauncher.isEmpty()) {
-        QString defaultLauncher = dataDir() + "/winbridge";
-        effLauncher = QFile::exists(defaultLauncher) ? defaultLauncher : "/usr/local/bin/winbridge";
+        QString standardLauncher = QStandardPaths::findExecutable("winbridge");
+        if (!standardLauncher.isEmpty()) {
+            effLauncher = standardLauncher;
+        } else {
+            QString defaultLauncher = dataDir() + "/winbridge";
+            effLauncher = QFile::exists(defaultLauncher) ? defaultLauncher : "/usr/local/bin/winbridge";
+        }
     }
 
     QString effProton = proton;
@@ -456,7 +475,7 @@ QJsonObject toggleShortcut(
     }
 
     if (!effProton.isEmpty() && QFile::exists(effProton)) {
-        importShortcuts(pfx, effProton, effLauncher, "", desktopDir());
+        importShortcuts(pfx, effProton, effLauncher, customDataDir, customDesktopDir.isEmpty() ? desktopDir() : customDesktopDir);
     }
 
     QJsonObject ret;
@@ -508,7 +527,13 @@ QStringList importShortcuts(
             QFile::remove(deskDest);
         }
 
-        if (!showMenu && !showDesktop) continue;
+        if (!showMenu && !showDesktop) {
+            for (int s : {16, 22, 24, 32, 48, 64, 128, 256, 512}) {
+                QString ipath = QString("%1/icons/hicolor/%2x%2/apps/winbridge-%3.png").arg(data).arg(s).arg(identity);
+                QFile::remove(ipath);
+            }
+            continue;
+        }
 
         QStringList command;
         if (launcher.endsWith(".py")) {
@@ -524,9 +549,54 @@ QStringList importShortcuts(
 
         QString icon = "application-x-executable";
         QString iconName = entry.value("Icon");
-        if (!iconName.isEmpty() && QFileInfo(iconName).fileName() == iconName) {
-            QString realIcon = shortcutIconPath(source, iconName);
-            if (!realIcon.isEmpty()) icon = realIcon;
+        if (iconName.endsWith(".png", Qt::CaseInsensitive)) {
+            iconName.chop(4);
+        }
+
+        if (!iconName.isEmpty()) {
+            QDir iconsDir(source + "/icons");
+            if (iconsDir.exists()) {
+                QMap<int, QString> resMap;
+                int maxRes = 0;
+                QString bestIconPath;
+
+                for (const QString &subDir : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                    int res = 0;
+                    if (subDir.contains('x')) {
+                        res = subDir.split('x')[0].toInt();
+                    }
+                    QString candidate = iconsDir.filePath(subDir + "/apps/" + iconName + ".png");
+                    if (QFile::exists(candidate)) {
+                        if (res > 0) resMap[res] = candidate;
+                        if (res >= maxRes) {
+                            maxRes = res;
+                            bestIconPath = candidate;
+                        }
+                    }
+                }
+
+                if (!bestIconPath.isEmpty()) {
+                    QString themeIconName = QString("winbridge-%1").arg(identity);
+                    QImage bestImg;
+                    bestImg.load(bestIconPath);
+
+                    const QVector<int> standardSizes = {16, 22, 24, 32, 48, 64, 128, 256, 512};
+                    for (int s : standardSizes) {
+                        QString targetDir = QString("%1/icons/hicolor/%2x%2/apps").arg(data).arg(s);
+                        QDir().mkpath(targetDir);
+                        QString targetPath = QString("%1/%2.png").arg(targetDir, themeIconName);
+
+                        if (resMap.contains(s)) {
+                            QFile::remove(targetPath);
+                            QFile::copy(resMap[s], targetPath);
+                        } else if (!bestImg.isNull()) {
+                            QImage scaled = bestImg.scaled(s, s, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                            scaled.save(targetPath, "PNG");
+                        }
+                    }
+                    icon = themeIconName;
+                }
+            }
         }
 
         QStringList quotedCmd;
@@ -573,6 +643,16 @@ QStringList importShortcuts(
     QProcess updateProc;
     updateProc.start("update-desktop-database", {data + "/applications"});
     updateProc.waitForFinished(1000);
+
+    if (customDataDir.isEmpty()) {
+        QProcess iconProc;
+        iconProc.start("gtk-update-icon-cache", {"-f", "-t", data + "/icons/hicolor"});
+        iconProc.waitForFinished(2000);
+
+        QProcess sycocaProc;
+        sycocaProc.start("kbuildsycoca6", {"--noincremental"});
+        sycocaProc.waitForFinished(3000);
+    }
 
     return imported;
 }

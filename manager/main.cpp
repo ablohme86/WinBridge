@@ -69,7 +69,16 @@ class Manager : public QWidget {
     }
     void showAppIcon(QLabel *target, const QString &path, const QString &fallback, int size) {
         target->clear();
-        QPixmap pixmap(path);
+        QPixmap pixmap;
+        if (!path.isEmpty() && QFile::exists(path)) {
+            pixmap.load(path);
+        } else if (!path.isEmpty()) {
+            QIcon themeIcon = QIcon::fromTheme(path);
+            if (!themeIcon.isNull()) {
+                const qreal ratio = target->devicePixelRatioF();
+                pixmap = themeIcon.pixmap(qRound(size * ratio), qRound(size * ratio));
+            }
+        }
         if (pixmap.isNull()) {
             target->setText(fallback);
             return;
@@ -714,16 +723,20 @@ int main(int argc, char **argv) {
     QString backend=parser.value("backend");
     if(backend.isEmpty()) {
         QDir bin(QCoreApplication::applicationDirPath());
+        QString standardBackend = QStandardPaths::findExecutable("winbridge-backend");
         QStringList candidates{
             bin.filePath("winbridge-backend"),
             bin.filePath("../winbridge-backend"),
+            standardBackend,
+            QDir::homePath() + "/.local/bin/winbridge-backend",
+            QDir::homePath() + "/.local/share/winbridge/winbridge-backend",
             "/usr/local/bin/winbridge-backend",
             "/usr/bin/winbridge-backend",
             bin.filePath("manager_backend.py"),
             bin.filePath("../../manager_backend.py"),
             bin.filePath("../lib/winbridge/manager_backend.py")
         };
-        for(const auto &candidate:candidates)if(QFileInfo::exists(candidate)){backend=QFileInfo(candidate).absoluteFilePath();break;}
+        for(const auto &candidate:candidates)if(!candidate.isEmpty() && QFileInfo::exists(candidate)){backend=QFileInfo(candidate).absoluteFilePath();break;}
     }
     int exitCode;
     do {

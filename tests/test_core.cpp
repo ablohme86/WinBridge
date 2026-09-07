@@ -17,6 +17,7 @@
 */
 
 #include <QtTest>
+#include <QImage>
 #include "shared_space.h"
 #include "shortcuts.h"
 #include "manager_backend.h"
@@ -167,9 +168,73 @@ private slots:
         QCOMPARE(readBack["sc1"].toObject()["desktop"].toBool(), false);
         QCOMPARE(readBack["sc1"].toObject()["menu"].toBool(), true);
 
-        QJsonObject res = toggleShortcut(tmp.path(), "sc1", true, false, tmp.filePath("launcher"), "");
+        QJsonObject res = toggleShortcut(tmp.path(), "sc1", true, false, tmp.filePath("launcher"), "dummy_proton", tmp.filePath("data"), tmp.filePath("desktop"));
         QCOMPARE(res["desktop"].toBool(), true);
         QCOMPARE(res["menu"].toBool(), false);
+    }
+
+    void testImportShortcutsAndIconGeneration() {
+        QTemporaryDir tmp;
+        QString pfx = tmp.path();
+        QString sourceDir = pfx + "/pfx/drive_c/proton_shortcuts";
+        QDir().mkpath(sourceDir + "/icons/48x48/apps");
+
+        // Create a 48x48 test png icon
+        QImage testImg(48, 48, QImage::Format_ARGB32);
+        testImg.fill(Qt::blue);
+        QVERIFY(testImg.save(sourceDir + "/icons/48x48/apps/game_icon.0.png"));
+
+        // Create a test .desktop file in proton_shortcuts
+        QDir().mkpath(pfx + "/pfx/drive_c/Games/TestGame");
+        QFile dummyExe(pfx + "/pfx/drive_c/Games/TestGame/game.exe");
+        QVERIFY(dummyExe.open(QIODevice::WriteOnly));
+        dummyExe.write("MZ");
+        dummyExe.close();
+
+        QFile scFile(sourceDir + "/TestGame.desktop");
+        QVERIFY(scFile.open(QIODevice::WriteOnly));
+        scFile.write(QString("[Desktop Entry]\nType=Application\nName=Test Game\nExec=%1\nIcon=game_icon.0\n")
+            .arg(desktopQuote(R"(C:\Games\TestGame\game.exe)")).toUtf8());
+        scFile.close();
+
+        QString customData = tmp.filePath("data");
+        QString customDesktop = tmp.filePath("desktop");
+        QDir().mkpath(customData + "/applications");
+        QDir().mkpath(customDesktop);
+
+        QStringList imported = importShortcuts(pfx, "dummy_proton", tmp.filePath("winbridge"), customData, customDesktop);
+        QCOMPARE(imported.size(), 1);
+        QCOMPARE(imported[0], QString("Test Game"));
+
+        // Verify .desktop was created in customData/applications and customDesktop
+        QDir appDir(customData + "/applications");
+        QStringList appFiles = appDir.entryList({"winbridge-*.desktop"}, QDir::Files);
+        QCOMPARE(appFiles.size(), 1);
+
+        QDir deskDir(customDesktop);
+        QStringList deskFiles = deskDir.entryList({"winbridge-*.desktop"}, QDir::Files);
+        QCOMPARE(deskFiles.size(), 1);
+
+        // Read the created .desktop file and check Icon
+        QFile created(appDir.filePath(appFiles[0]));
+        QVERIFY(created.open(QIODevice::ReadOnly));
+        QString content = QString::fromUtf8(created.readAll());
+        created.close();
+
+        // Icon should be winbridge-<identity>
+        QString identity = appFiles[0].mid(10, appFiles[0].length() - 18);
+        QVERIFY(content.contains("Icon=winbridge-" + identity));
+
+        // Verify hicolor icons were generated for standard sizes, e.g. 48x48 and 16x16
+        QString hicolor48 = QString("%1/icons/hicolor/48x48/apps/winbridge-%2.png").arg(customData, identity);
+        QString hicolor16 = QString("%1/icons/hicolor/16x16/apps/winbridge-%2.png").arg(customData, identity);
+        QVERIFY(QFile::exists(hicolor48));
+        QVERIFY(QFile::exists(hicolor16));
+
+        // Verify the scaled 16x16 icon has correct dimensions
+        QImage readImg(hicolor16);
+        QCOMPARE(readImg.width(), 16);
+        QCOMPARE(readImg.height(), 16);
     }
 };
 

@@ -70,7 +70,9 @@ QJsonObject toggleShortcut(
     const QVariant &desktop = QVariant(),
     const QVariant &menu = QVariant(),
     const QString &launcher = "",
-    const QString &proton = ""
+    const QString &proton = "",
+    const QString &customDataDir = "",
+    const QString &customDesktopDir = ""
 );
 
 QStringList importShortcuts(

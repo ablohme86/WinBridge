@@ -311,13 +311,15 @@ QMap<QString, QString> programIcons(const QString &prefix) {
 
         if (name.isEmpty() || icon.isEmpty() || QFileInfo(icon).fileName() != icon) continue;
 
+        QString cleanIcon = icon.endsWith(".png", Qt::CaseInsensitive) ? icon.left(icon.length() - 4) : icon;
+
         QDir iconsDir(source + "/icons");
         if (!iconsDir.exists()) continue;
 
         QString bestPath;
         int maxRes = -1;
         for (const QString &sub : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            QString p = iconsDir.filePath(sub + "/apps/" + icon + ".png");
+            QString p = iconsDir.filePath(sub + "/apps/" + cleanIcon + ".png");
             QFileInfo fi(p);
             if (fi.isFile()) {
                 int res = 0;
