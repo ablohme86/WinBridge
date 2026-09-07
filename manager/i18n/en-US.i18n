@@ -75,6 +75,15 @@
     "Start menu": "Start menu",
     "Updating shortcut …": "Updating shortcut …",
     "Shortcut updated.": "Shortcut updated.",
-    "Could not update shortcut.": "Could not update shortcut."
+    "Could not update shortcut.": "Could not update shortcut.",
+    "●  Running": "●  Running",
+    "Kill": "Kill",
+    "Kill app": "Kill app",
+    "Kill running app": "Kill running app",
+    "Forcibly terminate running app": "Forcibly terminate running app",
+    "Are you sure you want to forcibly kill %1?": "Are you sure you want to forcibly kill %1?",
+    "Killing app …": "Killing app …",
+    "App terminated.": "App terminated.",
+    "Could not terminate app.": "Could not terminate app."
   }
 }

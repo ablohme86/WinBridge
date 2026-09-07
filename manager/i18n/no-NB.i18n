@@ -75,6 +75,15 @@
     "Start menu": "Programmeny",
     "Updating shortcut …": "Oppdaterer snarvei …",
     "Shortcut updated.": "Snarvei oppdatert.",
-    "Could not update shortcut.": "Kunne ikke oppdatere snarvei."
+    "Could not update shortcut.": "Kunne ikke oppdatere snarvei.",
+    "●  Running": "●  Kjører",
+    "Kill": "Tvangsavslutt",
+    "Kill app": "Tvangsavslutt app",
+    "Kill running app": "Tvangsavslutt app",
+    "Forcibly terminate running app": "Tvangsavslutt kjørende app",
+    "Are you sure you want to forcibly kill %1?": "Er du sikker på at du vil tvangsavslutte %1?",
+    "Killing app …": "Avslutter app …",
+    "App terminated.": "Appen ble avsluttet.",
+    "Could not terminate app.": "Kunne ikke avslutte appen."
   }
 }

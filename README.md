@@ -77,6 +77,7 @@ App icons are reused from Proton’s exported Windows shortcuts in both the libr
 
 - **Search** filters the installed-program list.
 - **Refresh** reloads the list from Wine.
+- **Running app detection & Force Stop** detects active Windows apps running in the shared environment with a live "● Running" badge, and provides a "Kill" button on the item and in the detail panel to forcibly terminate frozen or running apps.
 - **Expandable shortcuts** let you expand any installed program row to toggle whether individual shortcuts appear in your Linux desktop and/or application menu.
 - **Uninstall app** asks for confirmation, then opens the program's own uninstall wizard.
 - **Open Windows folder** opens the shared `C:` drive in your file manager.

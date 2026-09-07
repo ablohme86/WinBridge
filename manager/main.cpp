@@ -24,9 +24,10 @@ class Manager : public QWidget {
     QListWidget *list;
     QLineEdit *search;
     QLabel *count, *engine, *status, *detailName, *detailText, *badge, *empty;
-    QPushButton *removeButton, *refreshButton, *folderButton, *configureButton;
+    QPushButton *removeButton, *refreshButton, *folderButton, *configureButton, *killButton;
     QProgressBar *progress;
-    QProcess *process;
+    QProcess *process, *pollProcess;
+    QTimer *pollTimer;
     QString backend, prefix, selectedKey, pendingAction;
     QByteArray output;
     bool busy = false;
@@ -58,12 +59,26 @@ class Manager : public QWidget {
         scaled.setDevicePixelRatio(ratio);
         target->setPixmap(scaled);
     }
+    void updateKillButtonState() {
+        bool isRunning = false;
+        for (const auto &val : programs) {
+            auto obj = val.toObject();
+            if (obj["key"].toString() == selectedKey) {
+                isRunning = obj["running"].toBool();
+                break;
+            }
+        }
+        if (killButton) {
+            killButton->setEnabled(!busy && !selectedKey.isEmpty() && isRunning);
+        }
+    }
     void setBusy(bool value) {
         busy = value;
         progress->setVisible(value);
         refreshButton->setEnabled(!value);
         configureButton->setEnabled(!value);
         removeButton->setEnabled(!value && !selectedKey.isEmpty());
+        updateKillButtonState();
     }
     void request(const QString &action, const QString &key = {}) {
         if (busy) return;
@@ -74,6 +89,52 @@ class Manager : public QWidget {
         QStringList args{backend, action};
         if (!key.isEmpty()) args << "--key" << key;
         process->start("/usr/bin/python3", args);
+    }
+    void confirmAndKill(const QString &key, const QString &name) {
+        if (busy) return;
+        QMessageBox box(QMessageBox::Question, T("Kill running app"),
+                        T("Are you sure you want to forcibly kill %1?").arg(name),
+                        QMessageBox::NoButton, this);
+        auto *cancel = box.addButton(T("Cancel"), QMessageBox::RejectRole);
+        auto *yes = box.addButton(T("Kill"), QMessageBox::AcceptRole);
+        box.setDefaultButton(cancel);
+        box.exec();
+        if (box.clickedButton() == yes) {
+            killApp(key);
+        }
+    }
+    void killApp(const QString &key) {
+        if (busy) return;
+        setBusy(true);
+        status->setText(T("Killing app …"));
+        auto *p = new QProcess(this);
+        QStringList args{backend, "kill", "--key", key};
+        connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p, key](int code, QProcess::ExitStatus) {
+            setBusy(false);
+            QByteArray resData = p->readAllStandardOutput();
+            auto doc = QJsonDocument::fromJson(resData);
+            if (code == 0 && doc.isObject() && doc.object()["killed"].toBool()) {
+                status->setText(T("App terminated."));
+                for (int i = 0; i < programs.size(); ++i) {
+                    auto obj = programs[i].toObject();
+                    if (obj["key"].toString() == key) {
+                        obj["running"] = false;
+                        programs[i] = obj;
+                        break;
+                    }
+                }
+                render();
+            } else {
+                status->setText(T("Could not terminate app."));
+            }
+            p->deleteLater();
+            pollRunning();
+        });
+        p->start("/usr/bin/python3", args);
+    }
+    void pollRunning() {
+        if (busy || !pollProcess || pollProcess->state() != QProcess::NotRunning || backend.isEmpty() || programs.isEmpty()) return;
+        pollProcess->start("/usr/bin/python3", QStringList{backend, "running"});
     }
     void toggleShortcut(const QString &id, const QString &target, bool enabled) {
         status->setText(T("Updating shortcut …"));
@@ -123,7 +184,22 @@ class Manager : public QWidget {
             texts->addWidget(title);
             texts->addWidget(label(T("Windows app  ·  Shared environment"), "muted"));
             headerLayout->addLayout(texts, 1);
-            headerLayout->addWidget(label(T("Installed"), "installed"));
+
+            bool isRunning = p["running"].toBool();
+            if (isRunning) {
+                auto *runBadge = label(T("●  Running"), "running");
+                headerLayout->addWidget(runBadge);
+                auto *killBtn = button(T("Kill"), "itemKill");
+                killBtn->setObjectName("itemKill");
+                killBtn->setToolTip(T("Forcibly terminate running app"));
+                headerLayout->addWidget(killBtn);
+                connect(killBtn, &QPushButton::clicked, this, [this, key, name, item] {
+                    list->setCurrentItem(item);
+                    confirmAndKill(key, name);
+                });
+            } else {
+                headerLayout->addWidget(label(T("Installed"), "installed"));
+            }
 
             QJsonArray shortcuts = p["shortcuts"].toArray();
             QFrame *panel = nullptr;
@@ -224,6 +300,7 @@ class Manager : public QWidget {
         showAppIcon(badge, item ? item->data(Qt::UserRole + 2).toString() : QString(), item ? name.left(1).toUpper() : "W", 60);
         detailText->setText(item ? T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.") : T("Your Windows apps, all in one place."));
         removeButton->setEnabled(item && !busy);
+        updateKillButtonState();
     }
     void finished(int code, QProcess::ExitStatus exitStatus) {
         output += process->readAllStandardOutput();
@@ -320,6 +397,12 @@ public:
             QPushButton#shortcutToggle { background: #1f2536; border: 1px solid #333d54; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #a4b1cd; }
             QPushButton#shortcutToggle:hover { background: #2c354c; color: #ffffff; border-color: #6973a0; }
             QPushButton#shortcutToggle:disabled { color: #58627c; background: #171b26; border-color: #242938; }
+            QLabel#running { color: #34d399; font-size: 11px; font-weight: 700; }
+            QPushButton#itemKill { background: #381f2a; color: #ff9bbb; border: 1px solid #5c2d40; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
+            QPushButton#itemKill:hover { background: #4d2637; color: #ffffff; border-color: #853e5d; }
+            QPushButton#killAppButton { background: #381f2a; color: #ff9bbb; border: 1px solid #5c2d40; }
+            QPushButton#killAppButton:hover { background: #4d2637; color: #ffffff; border-color: #853e5d; }
+            QPushButton#killAppButton:disabled { background: #1a1f2d; color: #58627c; border-color: #282e40; }
         )");
         auto *outer = new QHBoxLayout(this); outer->setContentsMargins(0,0,0,0); outer->setSpacing(0);
         auto *sidebar = new QFrame; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(214);
@@ -355,7 +438,9 @@ public:
         badge=label("W","badge"); badge->setAlignment(Qt::AlignCenter); badge->setFixedSize(72,72); dl->addWidget(badge);
         detailName=label(T("Select an app"),"detailName"); detailName->setWordWrap(true); dl->addWidget(detailName);
         detailText=label(T("Your Windows apps, all in one place."),"muted"); detailText->setWordWrap(true); dl->addWidget(detailText);
-        dl->addStretch(); removeButton=button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton); body->addWidget(detail); main->addLayout(body,1);
+        dl->addStretch();
+        killButton=button(T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
+        removeButton=button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton); body->addWidget(detail); main->addLayout(body,1);
         auto *actions=new QHBoxLayout; folderButton=button(T("Open Windows folder")); folderButton->setEnabled(false); configureButton=button(T("Settings")); actions->addWidget(folderButton); actions->addWidget(configureButton); actions->addStretch(); main->addLayout(actions);
         progress=new QProgressBar; progress->setRange(0,0); progress->setTextVisible(false); progress->hide(); main->addWidget(progress);
         status=label(T("Ready"), "muted"); status->setWordWrap(true); main->addWidget(status);
@@ -370,13 +455,46 @@ public:
         connect(nav,&QPushButton::clicked,search,qOverload<>(&QWidget::setFocus));
         connect(folderButton,&QPushButton::clicked,this,[this]{QDesktopServices::openUrl(QUrl::fromLocalFile(prefix+"/pfx/drive_c"));});
         connect(configureButton,&QPushButton::clicked,this,[this]{showSettings();});
+        connect(killButton,&QPushButton::clicked,this,[this]{
+            if(selectedKey.isEmpty()||busy)return;
+            confirmAndKill(selectedKey,detailName->text());
+        });
         connect(removeButton,&QPushButton::clicked,this,[this]{
             if(selectedKey.isEmpty()||busy)return;
             QMessageBox box(QMessageBox::Question,T("Uninstall app"), T("Uninstall “%1”?\n\nThe app’s own uninstall wizard will open.").arg(detailName->text()),QMessageBox::NoButton,this);
             auto *cancel=box.addButton(T("Cancel"),QMessageBox::RejectRole); auto *yes=box.addButton(T("Uninstall"),QMessageBox::AcceptRole);box.setDefaultButton(cancel);box.exec();
             if(box.clickedButton()==yes)request("uninstall",selectedKey);
         });
-        if (!screenshot) QTimer::singleShot(0,this,[this]{request("list");});
+        pollProcess=new QProcess(this);
+        connect(pollProcess,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus){
+            if(code==0&&!busy){
+                auto doc=QJsonDocument::fromJson(pollProcess->readAllStandardOutput());
+                if(doc.isObject()){
+                    auto runningMap=doc.object()["running"].toObject();
+                    bool changed=false;
+                    for(int i=0;i<programs.size();++i){
+                        auto obj=programs[i].toObject();
+                        QString k=obj["key"].toString();
+                        if(runningMap.contains(k)){
+                            bool isRun=runningMap[k].toBool();
+                            if(obj["running"].toBool()!=isRun){
+                                obj["running"]=isRun;
+                                programs[i]=obj;
+                                changed=true;
+                            }
+                        }
+                    }
+                    if(changed)render();
+                }
+            }
+        });
+        pollTimer=new QTimer(this);
+        pollTimer->setInterval(3000);
+        connect(pollTimer,&QTimer::timeout,this,[this]{pollRunning();});
+        if (!screenshot) {
+            pollTimer->start();
+            QTimer::singleShot(0,this,[this]{request("list");});
+        }
         else {engine->setText(T("Not selected"));render();status->setText(T("Your environment is created when you first open an .exe file with WinBridge."));}
     }
 };

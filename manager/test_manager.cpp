@@ -119,6 +119,62 @@ private slots:
         QVERIFY(recorded.contains("--id sc1"));
         QVERIFY(recorded.contains("--desktop 0"));
     }
+    void detectRunningAndKillButton() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
+        QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
+        QJsonArray apps{
+            QJsonObject{{"key","run1"},{"name","Running Game"},{"running",true},{"pids",QJsonArray{1234}}},
+            QJsonObject{{"key","stop1"},{"name","Stopped Game"},{"running",false},{"pids",QJsonArray{}}}
+        };
+        QJsonObject data{{"ready",true},{"prefix",dir.path()},{"programs",apps}};
+        file.write(("import json,sys\nfrom pathlib import Path\np=Path("+QString("'%1'").arg(calls)+")\nargs=' '.join(sys.argv[1:])\np.write_text((p.read_text() if p.exists() else '') + args + '\\n')\nif 'kill' in sys.argv:\n    print(json.dumps({'killed': True, 'key': sys.argv[sys.argv.index('--key')+1]}))\nelif 'running' in sys.argv:\n    print(json.dumps({'running': {'run1': True, 'stop1': False}}))\nelse:\n    print("+QJsonDocument(QJsonArray{QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))}).toJson(QJsonDocument::Compact).mid(1).chopped(1)+")\n").toUtf8()); file.close();
+        Manager window(script); window.show();
+        auto *list = window.findChild<QListWidget*>("programList");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(), 2, 5000);
+
+        auto *runningBadge = window.findChild<QLabel*>("running");
+        QVERIFY(runningBadge != nullptr);
+        QVERIFY(runningBadge->text().contains("Running") || runningBadge->text().contains("Kjører"));
+
+        auto *itemKill = window.findChild<QPushButton*>("itemKill");
+        QVERIFY(itemKill != nullptr);
+
+        auto *detailKill = window.findChild<QPushButton*>("killAppButton");
+        QVERIFY(detailKill != nullptr);
+
+        list->setCurrentRow(0);
+        QVERIFY(detailKill->isEnabled());
+
+        list->setCurrentRow(1);
+        QVERIFY(!detailKill->isEnabled());
+
+        list->setCurrentRow(0);
+        QTimer::singleShot(20, []() {
+            auto *box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (box) {
+                for (auto *b : box->buttons()) {
+                    if (box->buttonRole(b) == QMessageBox::AcceptRole) {
+                        b->click();
+                        break;
+                    }
+                }
+            }
+        });
+        detailKill->click();
+
+        QTRY_VERIFY_WITH_TIMEOUT([&]() {
+            QFile f(calls);
+            return f.open(QIODevice::ReadOnly) && f.readAll().contains("kill");
+        }(), 5000);
+
+        QFile callFile(calls);
+        QVERIFY(callFile.open(QIODevice::ReadOnly));
+        QString recorded = QString::fromUtf8(callFile.readAll());
+        QVERIFY(recorded.contains("kill"));
+        QVERIFY(recorded.contains("--key run1"));
+    }
 };
 QTEST_MAIN(ManagerTest)
 #include "test_manager.moc"
+

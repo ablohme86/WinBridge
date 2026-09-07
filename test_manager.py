@@ -105,7 +105,52 @@ class ManagerTests(unittest.TestCase):
                 mock_toggle.assert_called_once_with(root, 'sc1', desktop=False, menu=True)
                 self.assertEqual(res, {'id': 'sc1', 'desktop': False, 'menu': True})
 
+    def test_get_running_apps_and_kill(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix = root / 'prefix'
+            proc_root = root / 'proc'
+            proc_root.mkdir()
+            p1000 = proc_root / '1000'
+            p1000.mkdir()
+            (p1000 / 'status').write_text('PPid:\t1\n')
+            (p1000 / 'environ').write_bytes(f'STEAM_COMPAT_DATA_PATH={prefix}\0'.encode())
+            (p1000 / 'cmdline').write_bytes(b'C:\\Games\\SimCity\\sc3u.exe\0')
+
+            p1001 = proc_root / '1001'
+            p1001.mkdir()
+            (p1001 / 'status').write_text('PPid:\t1000\n')
+            (p1001 / 'environ').write_bytes(f'STEAM_COMPAT_DATA_PATH={prefix}\0'.encode())
+            (p1001 / 'cmdline').write_bytes(b'helper.exe\0')
+
+            programs = [{'key': 'sc_key', 'name': 'SimCity', 'shortcuts': []}]
+            with patch('manager_backend.Path', side_effect=lambda *args: proc_root if args == ('/proc',) else Path(*args)):
+                running = manager.get_running_apps(prefix, programs)
+                self.assertEqual(running, {'sc_key': [1000, 1001]})
+
+                with patch('os.kill') as mock_kill, patch('time.sleep'):
+                    res = manager.kill_program(prefix, 'sc_key', programs)
+                    self.assertTrue(res['killed'])
+                    self.assertEqual(res['pids'], [1000, 1001])
+                    self.assertTrue(mock_kill.called)
+
+    def test_operate_running_and_kill_actions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(manager, 'shared_prefix', return_value=root), \
+                 patch.object(manager, 'get_running_apps', return_value={'app1': [123]}), \
+                 patch.object(manager, 'kill_program', return_value={'killed': True, 'key': 'app1', 'pids': [123]}):
+                res_running = manager.operate('running')
+                self.assertEqual(res_running, {'running': {'app1': True}})
+
+                res_kill = manager.operate('kill', key='app1')
+                self.assertEqual(res_kill, {'killed': True, 'key': 'app1', 'pids': [123]})
+
+                with self.assertRaises(RuntimeError):
+                    manager.operate('kill')
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
