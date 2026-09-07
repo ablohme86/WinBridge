@@ -21,9 +21,8 @@ Proton and its required Steam Linux Runtime must already be installed. Compatibi
 
 Requirements:
 
-- Python 3.9 or newer
-- CMake, a C++17 compiler, and Qt 6.2+ Widgets development files
-- Qt Test development files for the UI tests
+- CMake, a C++17 compiler, and Qt 6.2+ Core & Widgets development files
+- Qt 6 Test development files for the unit test suite
 - `xdg-utils` and `xdg-user-dirs`
 - KDialog or Zenity for the `.exe` launcher's first-run dialog
 - An installed Proton version and its matching Steam Linux Runtime
@@ -37,10 +36,11 @@ sudo pacman -S --needed base-devel cmake qt6-base xdg-utils xdg-user-dirs zenity
 Build and install from the project directory:
 
 ```sh
-python3 install.py
+make
+make install-user
 ```
 
-This builds the Qt Manager, installs WinBridge under `~/.local/share/winbridge`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run the same command to install an update. Existing Windows apps and settings are preserved.
+This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run `sudo make install` to install system-wide to `/usr/local`.
 
 ## Run Windows programs
 
@@ -49,16 +49,16 @@ Double-click an `.exe`, choose your installed Proton version on the first launch
 Installers and standalone executables are both supported. Keep a portable application's supporting DLLs and data files alongside it as required by that application.
 
 ```sh
-python3 winbridge.py --list
-python3 winbridge.py '/path/to/application.exe'
-python3 winbridge.py --configure
+winbridge --list
+winbridge '/path/to/application.exe'
+winbridge --configure
 ```
 
 Arguments following the executable are forwarded to the Windows application. Advanced per-launch overrides are available:
 
 ```sh
-python3 winbridge.py --proton '/path/to/Proton' '/path/to/application.exe'
-python3 winbridge.py --prefix '/path/to/compatdata' '/path/to/application.exe'
+winbridge --proton '/path/to/Proton' '/path/to/application.exe'
+winbridge --prefix '/path/to/compatdata' '/path/to/application.exe'
 ```
 
 `WINBRIDGE_SEARCH_PATHS` accepts additional Proton search directories separated by colons. The older `PROTONRUN_SEARCH_PATHS` name remains supported.
@@ -68,24 +68,10 @@ python3 winbridge.py --prefix '/path/to/compatdata' '/path/to/application.exe'
 Open **WinBridge Manager** from your application menu or run:
 
 ```sh
-python3 manager.py
+winbridge-manager
 ```
 
-The compatibility entry point opens the compiled Qt application. When installed from a distribution package, use `winbridge-manager` directly.
-
-App icons are reused from Proton’s exported Windows shortcuts in both the library and the detail panel. WinBridge selects the largest available PNG; apps without a matching readable icon use an initial as a fallback.
-
-- **Search** filters the installed-program list.
-- **Refresh** reloads the list from Wine.
-- **Running app detection & Force Stop** detects active Windows apps running in the shared environment with a live "● Running" badge, and provides a "Kill" button on the item and in the detail panel to forcibly terminate frozen or running apps.
-- **Expandable shortcuts** let you expand any installed program row to toggle whether individual shortcuts appear in your Linux desktop and/or application menu.
-- **Uninstall app** asks for confirmation, then opens the program's own uninstall wizard.
-- **Open Windows folder** opens the shared `C:` drive in your file manager.
-- **Settings** selects the interface language, Proton version, and Proton / Wine install directory.
-
-Close Windows applications before switching Proton versions. A version change keeps the existing Windows environment. Changing the interface language rebuilds the Manager window immediately after saving.
-
-The Qt interface uses `manager_backend.py` as a JSON bridge to the existing Python Proton integration. Listing and uninstalling use Proton's `runinprefix` mode, so management tools do not wait for unrelated Windows apps to close.
+The native C++ Qt 6 interface communicates with the compiled `winbridge-backend` binary. Listing and uninstalling use Proton's `runinprefix` mode, so management tools do not wait for unrelated Windows apps to close.
 
 Only programs registered with a Windows uninstaller appear in the library. Portable apps are not automatically registered. Uninstallers decide which application data to retain, and old Linux shortcuts may remain after uninstalling an app. Manager does not manually delete application folders.
 
@@ -114,19 +100,35 @@ There is no background desktop-folder watcher. Installers that do not export sup
 Existing exported shortcuts can be imported manually:
 
 ```sh
-python3 winbridge.py --import-shortcuts \
+winbridge --import-shortcuts \
   --prefix '/path/to/compatdata' --proton '/path/to/Proton'
 ```
 
-## Build the Qt application
+## Build and Install
+
+WinBridge is written in native C++17 / Qt 6 with a global `Makefile` and root CMake build system:
 
 ```sh
-cmake -S manager -B build/manager -DCMAKE_BUILD_TYPE=Release
-cmake --build build/manager --parallel 2
-./build/manager/winbridge-manager
+# Build all native executables (winbridge, winbridge-backend, winbridge-manager)
+make
+
+# Run the full test suite
+make test
+
+# Install system-wide to /usr/local
+sudo make install
+
+# Or install for the current user into ~/.local
+make install-user
 ```
 
-The executable discovers the backend alongside a user installation, in the source checkout, or under `/usr/lib/winbridge` for a system package. `--backend /path/to/manager_backend.py` explicitly overrides this location.
+The executables can also be built directly with CMake:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/manager/winbridge-manager
+```
 
 Generate an empty-library design preview without accessing a Windows environment:
 
@@ -163,7 +165,7 @@ The default builds all three formats into `dist/`, together with SHA-256 checksu
 | RPM | `rpmbuild` |
 | Arch | `makepkg`, `fakeroot` |
 
-Run the build as a normal user. The script does not install packages or download missing tools. Packages include the compiled Manager, Python integration, desktop entries, and app icon. They are architecture-specific (`x86_64`/`amd64` or `aarch64`/`arm64`).
+Run the build as a normal user. The script does not install packages or download missing tools. Packages include the compiled native executables (`winbridge`, `winbridge-backend`, `winbridge-manager`), desktop entries, and app icon. They are architecture-specific (`x86_64`/`amd64` or `aarch64`/`arm64`).
 
 Build on the intended target distribution. A binary built against a newer Arch Qt/glibc stack is not generally compatible with older Debian or Fedora systems. Qt minimum-version metadata reflects the build machine. The Arch package has been built locally; DEB and RPM require their respective tools for validation.
 
@@ -172,11 +174,12 @@ Build on the intended target distribution. A binary built against a newer Arch Q
 ## Tests
 
 ```sh
-python3 -m unittest -v
-ctest --test-dir build/manager --output-on-failure
+make test
+# or directly with CTest:
+ctest --test-dir build --output-on-failure
 ```
 
-Python tests cover Proton discovery, shared-environment persistence, argument handling, shortcut import, Manager backend operations, settings, and translation placeholders. Qt tests cover searching, selection, cancelled and confirmed uninstall actions against a fake backend, translation fallback, and language persistence. Tests do not uninstall real Windows programs.
+Tests cover core Proton discovery, Steam Linux Runtime resolution, shared-environment persistence, argument handling, shortcut importing and toggle synchronization, process tree scanning and termination, Manager UI searching, selection, uninstallation, translation fallback, and language persistence. Tests do not uninstall real Windows programs.
 
 ## Remove WinBridge
 

@@ -1,0 +1,580 @@
+/*
+    WinBridge v1.0
+    Copyright (c) 2026 A. Blohmè <alexander.blohme@gmail.com>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://gnu.org>.
+*/
+
+#include "shortcuts.h"
+#include "shared_space.h"
+
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QTemporaryFile>
+#include <sys/stat.h>
+
+namespace WinBridge {
+
+QString desktopQuote(const QString &value) {
+    QString val = value;
+    val.replace('%', "%%");
+    val.replace('\\', "\\\\");
+    val.replace('"', "\\\"");
+    val.replace('`', "\\`");
+    val.replace('$', "\\$");
+    val.replace('\\', "\\\\");
+    return "\"" + val + "\"";
+}
+
+QString field(const QString &value) {
+    QString val = value;
+    val.replace('\\', "\\\\");
+    val.replace('\n', "\\n");
+    val.replace('\r', "\\r");
+    return val;
+}
+
+QString desktopDir() {
+    QProcess proc;
+    proc.start("xdg-user-dir", {"DESKTOP"});
+    if (proc.waitForFinished(1000) && proc.exitCode() == 0) {
+        QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+        if (!out.isEmpty() && QDir::isAbsolutePath(out) && out != QDir::homePath()) {
+            return QDir::cleanPath(out);
+        }
+    }
+    return QString();
+}
+
+QString enclosingPrefix(const QString &exePath) {
+    QFileInfo fi(exePath);
+    QDir dir = fi.dir();
+    while (!dir.isRoot()) {
+        if (dir.dirName() == "drive_c") {
+            QDir parent = dir;
+            if (parent.cdUp() && parent.dirName() == "pfx") {
+                if (parent.cdUp()) {
+                    QString canon = parent.canonicalPath();
+                    return canon.isEmpty() ? QDir::cleanPath(parent.absolutePath()) : canon;
+                }
+            }
+        }
+        if (!dir.cdUp()) break;
+    }
+    return QString();
+}
+
+QString shortcutTarget(const QString &value, const QString &prefix) {
+    QString unescaped;
+    for (int i = 0; i < value.size(); ++i) {
+        if (value[i] == '\\' && i + 1 < value.size()) {
+            QChar c = value[i + 1];
+            if (c == 's') { unescaped += ' '; i++; }
+            else if (c == 'n') { unescaped += '\n'; i++; }
+            else if (c == 't') { unescaped += '\t'; i++; }
+            else if (c == 'r') { unescaped += '\r'; i++; }
+            else if (c == '\\') { unescaped += '\\'; i++; }
+            else { unescaped += value[i]; }
+        } else {
+            unescaped += value[i];
+        }
+    }
+
+    QStringList tokens;
+    QString cur;
+    bool inSingle = false, inDouble = false, escaped = false;
+    for (int i = 0; i < unescaped.size(); ++i) {
+        QChar c = unescaped[i];
+        if (escaped) {
+            cur += c;
+            escaped = false;
+        } else if (c == '\\' && !inSingle) {
+            escaped = true;
+        } else if (c == '\'' && !inDouble) {
+            inSingle = !inSingle;
+        } else if (c == '"' && !inSingle) {
+            inDouble = !inDouble;
+        } else if (c.isSpace() && !inSingle && !inDouble) {
+            if (!cur.isEmpty()) {
+                tokens << cur;
+                cur.clear();
+            }
+        } else {
+            cur += c;
+        }
+    }
+    if (!cur.isEmpty()) tokens << cur;
+    if (tokens.size() != 1) return QString();
+    QString token = tokens[0];
+
+    static QRegularExpression driveRegex("^[cC]:[\\\\/]");
+    if (!driveRegex.match(token).hasMatch()) return QString();
+
+    QString rel = token.mid(3);
+    rel.replace('\\', '/');
+
+    QString cleanPrefix = QDir::cleanPath(prefix);
+    QDir driveCDir(cleanPrefix + "/pfx/drive_c");
+    QString driveC = driveCDir.canonicalPath();
+    if (driveC.isEmpty()) driveC = QDir::cleanPath(driveCDir.absolutePath());
+
+    QFileInfo targetFi(driveC + "/" + rel);
+    QString targetPath = targetFi.canonicalFilePath();
+    if (targetPath.isEmpty()) return QString();
+    if (!targetPath.startsWith(driveC + "/") && targetPath != driveC) return QString();
+
+    QString suffix = targetFi.suffix().toLower();
+    if (suffix != "lnk" && suffix != "exe") return QString();
+    if (!targetFi.isFile()) return QString();
+
+    return targetPath;
+}
+
+QString shortcutsConfigPath() {
+    QString conf = qEnvironmentVariable("XDG_CONFIG_HOME");
+    if (conf.isEmpty()) {
+        conf = QDir::homePath() + "/.config";
+    }
+    return QDir::cleanPath(conf + "/winbridge/shortcuts.json");
+}
+
+QJsonObject readShortcutsConfig() {
+    QFile file(shortcutsConfigPath());
+    if (!file.open(QIODevice::ReadOnly)) return QJsonObject();
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    return doc.isObject() ? doc.object() : QJsonObject();
+}
+
+bool saveShortcutsConfig(const QJsonObject &config) {
+    QString path = shortcutsConfigPath();
+    QDir dir = QFileInfo(path).dir();
+    if (!dir.exists()) dir.mkpath(".");
+
+    QTemporaryFile temp(path + ".tmp.XXXXXX");
+    if (!temp.open()) return false;
+    temp.write(QJsonDocument(config).toJson(QJsonDocument::Indented));
+    temp.flush();
+    QString tempPath = temp.fileName();
+    temp.close();
+
+    QFile::remove(path);
+    return QFile::rename(tempPath, path);
+}
+
+QString shortcutIconPath(const QString &sourceDir, const QString &iconName) {
+    if (iconName.isEmpty() || QFileInfo(iconName).fileName() != iconName) return QString();
+    QDir iconsDir(sourceDir + "/icons");
+    if (!iconsDir.exists()) return QString();
+
+    QString bestPath;
+    int maxRes = -1;
+    for (const QString &sub : iconsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        QString p = iconsDir.filePath(sub + "/apps/" + iconName + ".png");
+        QFileInfo fi(p);
+        if (fi.isFile()) {
+            int res = 0;
+            if (sub.contains('x')) {
+                res = sub.split('x')[0].toInt();
+            }
+            if (res >= maxRes) {
+                maxRes = res;
+                bestPath = fi.canonicalFilePath().isEmpty() ? QDir::cleanPath(fi.absoluteFilePath()) : fi.canonicalFilePath();
+            }
+        }
+    }
+    return bestPath;
+}
+
+static QMap<QString, QString> parseDesktopFile(const QString &path) {
+    QMap<QString, QString> entry;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return entry;
+    bool inDesktopEntry = false;
+    while (!file.atEnd()) {
+        QString line = QString::fromUtf8(file.readLine()).trimmed();
+        if (line.startsWith('[')) {
+            inDesktopEntry = (line == "[Desktop Entry]");
+            continue;
+        }
+        if (!inDesktopEntry || line.startsWith('#') || !line.contains('=')) continue;
+        int idx = line.indexOf('=');
+        QString key = line.left(idx).trimmed();
+        QString val = line.mid(idx + 1).trimmed();
+        entry[key] = val;
+    }
+    return entry;
+}
+
+QList<ShortcutInfo> loadShortcuts(const QString &prefix, const QString &customDataDir, const QString &customDesktop) {
+    QString pfx = QDir::cleanPath(prefix);
+    QString data = customDataDir.isEmpty() ? (qEnvironmentVariable("XDG_DATA_HOME").isEmpty() ? QDir::homePath() + "/.local/share" : qEnvironmentVariable("XDG_DATA_HOME")) : customDataDir;
+    QString desktop = customDesktop.isEmpty() ? desktopDir() : customDesktop;
+
+    QString source = pfx + "/pfx/drive_c/proton_shortcuts";
+    QDir srcDir(source);
+    QJsonObject config = readShortcutsConfig();
+    QList<ShortcutInfo> shortcuts;
+
+    for (const QString &file : srcDir.entryList({"*.desktop"}, QDir::Files, QDir::Name)) {
+        QString scPath = srcDir.filePath(file);
+        auto entry = parseDesktopFile(scPath);
+        QString execVal = entry.value("Exec");
+        QString target = shortcutTarget(execVal, pfx);
+        if (target.isEmpty()) continue;
+
+        QString name = entry.value("Name", QFileInfo(file).completeBaseName());
+        QByteArray idData = pfx.toUtf8() + '\0' + file.toUtf8();
+        QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
+        QString filename = QString("winbridge-%1.desktop").arg(identity);
+
+        QString iconName = entry.value("Icon");
+        QString icon = shortcutIconPath(source, iconName);
+
+        QJsonObject pref = config.value(identity).toObject();
+        QString appFile = data + "/applications/" + filename;
+        QString deskFile = desktop.isEmpty() ? QString() : desktop + "/" + filename;
+
+        bool menuEnabled = pref.contains("menu") ? pref.value("menu").toBool() : (!config.isEmpty() ? QFile::exists(appFile) : true);
+        bool desktopEnabled = pref.contains("desktop") ? pref.value("desktop").toBool() : (!config.isEmpty() ? (!desktop.isEmpty() && QFile::exists(deskFile)) : true);
+
+        ShortcutInfo sc;
+        sc.id = identity;
+        sc.name = name;
+        sc.file = file;
+        sc.icon = icon;
+        sc.path = entry.value("Path");
+        sc.exec = execVal;
+        sc.desktop = desktopEnabled;
+        sc.menu = menuEnabled;
+        shortcuts.append(sc);
+    }
+    return shortcuts;
+}
+
+static QString decodeRegString(const QString &input) {
+    QString s = input;
+    static QRegularExpression hexRegex(R"(\\x([0-9a-fA-F]{4}))");
+    QRegularExpressionMatchIterator it = hexRegex.globalMatch(s);
+    int offset = 0;
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        ushort unicodeVal = match.captured(1).toUShort(nullptr, 16);
+        QString rep = QString(QChar(unicodeVal));
+        s.replace(match.capturedStart() + offset, match.capturedLength(), rep);
+        offset += rep.length() - match.capturedLength();
+    }
+    return s;
+}
+
+QMap<QString, ProgramRegistryMeta> getProgramRegistryMeta(const QString &prefix) {
+    QString pfx = QDir::cleanPath(prefix);
+    QMap<QString, ProgramRegistryMeta> meta;
+    QStringList regFiles = {pfx + "/pfx/system.reg", pfx + "/pfx/user.reg"};
+
+    for (const QString &regPath : regFiles) {
+        QFile f(regPath);
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        QString content = QString::fromUtf8(f.readAll());
+
+        static QRegularExpression sectionRegex(R"(\[Software\\\\(?:Wow6432Node\\\\)?Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\([^\]]+)\](.*?)(?=\n\[|\Z))", QRegularExpression::DotMatchesEverythingOption);
+        QRegularExpressionMatchIterator it = sectionRegex.globalMatch(content);
+        while (it.hasNext()) {
+            QRegularExpressionMatch match = it.next();
+            QString key = match.captured(1).trimmed();
+            QString body = match.captured(2);
+
+            static QRegularExpression nameRe(R"(\"DisplayName\"=\"([^\"]+)\")");
+            static QRegularExpression locRe(R"(\"(?:InstallLocation|Inno Setup: App Path)\"=\"([^\"]+)\")");
+            static QRegularExpression grpRe(R"(\"Inno Setup: Icon Group\"=\"([^\"]+)\")");
+            static QRegularExpression iconRe(R"(\"DisplayIcon\"=\"([^\"]+)\")");
+
+            auto nameM = nameRe.match(body);
+            auto locM = locRe.match(body);
+            auto grpM = grpRe.match(body);
+            auto iconM = iconRe.match(body);
+
+            QString disp = nameM.hasMatch() ? decodeRegString(nameM.captured(1)) : "";
+            QString loc = locM.hasMatch() ? locM.captured(1).replace(R"(\\)", "/").trimmed() : "";
+            if (loc.startsWith('/')) loc = loc.mid(1);
+            if (loc.startsWith("C:", Qt::CaseInsensitive)) loc = loc.mid(2).trimmed();
+            if (loc.startsWith('/')) loc = loc.mid(1);
+
+            QString grp = grpM.hasMatch() ? grpM.captured(1).replace(R"(\\)", "/") : "";
+            QString ic = "";
+            if (iconM.hasMatch()) {
+                QString raw = iconM.captured(1).replace(R"(\\)", "/");
+                ic = QFileInfo(raw).completeBaseName();
+            }
+
+            ProgramRegistryMeta m;
+            m.key = key;
+            m.name = disp;
+            m.loc = loc;
+            m.group = grp;
+            m.icon = ic;
+            meta[key.toLower()] = m;
+        }
+    }
+    return meta;
+}
+
+QJsonArray groupShortcutsByProgram(const QString &prefix, const QJsonArray &programs) {
+    auto meta = getProgramRegistryMeta(prefix);
+    auto allShortcuts = loadShortcuts(prefix);
+    QMap<QString, QJsonArray> grouped;
+
+    for (const auto &progVal : programs) {
+        grouped[progVal.toObject().value("key").toString()] = QJsonArray();
+    }
+
+    for (const auto &sc : allShortcuts) {
+        QString scName = sc.name.toLower();
+        QString scPath = QString(sc.path).replace('\\', '/').toLower();
+        QString scExec = QString(sc.exec).replace('\\', '/').toLower();
+        QString scFile = sc.file.toLower();
+
+        QString bestMatch;
+        int bestScore = 0;
+
+        for (const auto &progVal : programs) {
+            auto prog = progVal.toObject();
+            QString k = prog.value("key").toString();
+            auto m = meta.value(k.toLower());
+
+            QString pName = (!prog.value("name").toString().isEmpty() ? prog.value("name").toString() : m.name).toLower();
+            QString pLoc = m.loc.toLower();
+            QString pGrp = m.group.toLower();
+            QString pIcon = m.icon.toLower();
+
+            int score = 0;
+            if (!pLoc.isEmpty() && scPath.contains(pLoc)) {
+                score += 50 + pLoc.length();
+            }
+            if (!pGrp.isEmpty() && scExec.contains(pGrp)) {
+                score += 40 + pGrp.length();
+            }
+            if (!pName.isEmpty() && scExec.contains(pName)) {
+                score += 30 + pName.length();
+            }
+            if (!pName.isEmpty() && scPath.contains(pName)) {
+                score += 25 + pName.length();
+            }
+            if (!pName.isEmpty() && (pName == scName || pName.contains(scName) || scName.contains(pName))) {
+                score += 20 + pName.length();
+            }
+            if (!pIcon.isEmpty() && scFile.contains(pIcon)) {
+                score += 15;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = k;
+            }
+        }
+
+        if (!bestMatch.isEmpty() && bestScore > 0) {
+            QJsonObject scObj;
+            scObj["id"] = sc.id;
+            scObj["name"] = sc.name;
+            scObj["icon"] = sc.icon;
+            scObj["desktop"] = sc.desktop;
+            scObj["menu"] = sc.menu;
+            auto arr = grouped[bestMatch];
+            arr.append(scObj);
+            grouped[bestMatch] = arr;
+        }
+    }
+
+    QJsonArray result;
+    for (const auto &progVal : programs) {
+        auto prog = progVal.toObject();
+        QString k = prog.value("key").toString();
+        auto arr = grouped.value(k);
+
+        // Sort shortcuts by name case-insensitively
+        QList<QJsonObject> list;
+        for (const auto &v : arr) list.append(v.toObject());
+        std::sort(list.begin(), list.end(), [](const QJsonObject &a, const QJsonObject &b) {
+            return a.value("name").toString().toLower() < b.value("name").toString().toLower();
+        });
+
+        QJsonArray sortedArr;
+        for (const auto &item : list) sortedArr.append(item);
+        prog["shortcuts"] = sortedArr;
+        result.append(prog);
+    }
+    return result;
+}
+
+QJsonObject toggleShortcut(
+    const QString &prefix,
+    const QString &shortcutId,
+    const QVariant &desktop,
+    const QVariant &menu,
+    const QString &launcher,
+    const QString &proton
+) {
+    QString pfx = QDir::cleanPath(prefix);
+    QJsonObject config = readShortcutsConfig();
+    QJsonObject pref = config.value(shortcutId).toObject();
+
+    if (desktop.isValid()) {
+        pref["desktop"] = desktop.toBool();
+    }
+    if (menu.isValid()) {
+        pref["menu"] = menu.toBool();
+    }
+    config[shortcutId] = pref;
+    saveShortcutsConfig(config);
+
+    QString effLauncher = launcher;
+    if (effLauncher.isEmpty()) {
+        QString defaultLauncher = dataDir() + "/winbridge";
+        effLauncher = QFile::exists(defaultLauncher) ? defaultLauncher : "/usr/local/bin/winbridge";
+    }
+
+    QString effProton = proton;
+    if (effProton.isEmpty()) {
+        QJsonObject settings = readSettings();
+        effProton = settings.value("proton").toString();
+    }
+
+    if (!effProton.isEmpty() && QFile::exists(effProton)) {
+        importShortcuts(pfx, effProton, effLauncher, "", desktopDir());
+    }
+
+    QJsonObject ret;
+    ret["id"] = shortcutId;
+    ret["desktop"] = pref.value("desktop").toBool(true);
+    ret["menu"] = pref.value("menu").toBool(true);
+    return ret;
+}
+
+QStringList importShortcuts(
+    const QString &prefix,
+    const QString &proton,
+    const QString &launcher,
+    const QString &customDataDir,
+    const QString &customDesktopDir
+) {
+    QString pfx = QDir::cleanPath(prefix);
+    QString data = customDataDir.isEmpty() ? (qEnvironmentVariable("XDG_DATA_HOME").isEmpty() ? QDir::homePath() + "/.local/share" : qEnvironmentVariable("XDG_DATA_HOME")) : customDataDir;
+    QString desktop = customDesktopDir.isEmpty() ? desktopDir() : customDesktopDir;
+
+    QString source = pfx + "/pfx/drive_c/proton_shortcuts";
+    QDir srcDir(source);
+    QJsonObject config = readShortcutsConfig();
+    QStringList imported;
+
+    for (const QString &file : srcDir.entryList({"*.desktop"}, QDir::Files, QDir::Name)) {
+        QString scPath = srcDir.filePath(file);
+        auto entry = parseDesktopFile(scPath);
+        QString execVal = entry.value("Exec");
+        QString target = shortcutTarget(execVal, pfx);
+        if (target.isEmpty()) continue;
+
+        QString name = entry.value("Name", QFileInfo(file).completeBaseName());
+        QByteArray idData = pfx.toUtf8() + '\0' + file.toUtf8();
+        QString identity = QString::fromUtf8(QCryptographicHash::hash(idData, QCryptographicHash::Sha256).toHex()).left(20);
+        QString filename = QString("winbridge-%1.desktop").arg(identity);
+
+        QJsonObject pref = config.value(identity).toObject();
+        bool showMenu = pref.contains("menu") ? pref.value("menu").toBool() : true;
+        bool showDesktop = pref.contains("desktop") ? pref.value("desktop").toBool() : true;
+
+        QString appDest = data + "/applications/" + filename;
+        QString deskDest = desktop.isEmpty() ? QString() : desktop + "/" + filename;
+
+        if (!showMenu && QFile::exists(appDest)) {
+            QFile::remove(appDest);
+        }
+        if (!showDesktop && !deskDest.isEmpty() && QFile::exists(deskDest)) {
+            QFile::remove(deskDest);
+        }
+
+        if (!showMenu && !showDesktop) continue;
+
+        QStringList command;
+        if (launcher.endsWith(".py")) {
+            command << "/usr/bin/python3" << launcher;
+        } else {
+            command << launcher;
+        }
+
+        if (pfx != sharedPrefix().trimmed()) {
+            command << "--prefix" << pfx << "--proton" << proton;
+        }
+        command << "--" << target;
+
+        QString icon = "application-x-executable";
+        QString iconName = entry.value("Icon");
+        if (!iconName.isEmpty() && QFileInfo(iconName).fileName() == iconName) {
+            QString realIcon = shortcutIconPath(source, iconName);
+            if (!realIcon.isEmpty()) icon = realIcon;
+        }
+
+        QStringList quotedCmd;
+        for (const QString &arg : command) {
+            quotedCmd << desktopQuote(arg);
+        }
+
+        QString content = QString("[Desktop Entry]\nType=Application\nName=%1\nExec=%2\nIcon=%3\nTerminal=false\nCategories=Game;\nComment=Start med WinBridge\n")
+            .arg(field(name), quotedCmd.join(" "), field(icon));
+
+        QStringList destinations;
+        if (showMenu) destinations << appDest;
+        if (showDesktop && !deskDest.isEmpty()) destinations << deskDest;
+
+        for (const QString &destination : destinations) {
+            QDir destDir = QFileInfo(destination).dir();
+            if (!destDir.exists()) destDir.mkpath(".");
+
+            bool needsWrite = true;
+            QFile existing(destination);
+            if (existing.open(QIODevice::ReadOnly)) {
+                if (existing.readAll() == content.toUtf8()) {
+                    needsWrite = false;
+                }
+                existing.close();
+            }
+
+            if (needsWrite) {
+                QTemporaryFile temp(destination + ".tmp.XXXXXX");
+                if (temp.open()) {
+                    temp.write(content.toUtf8());
+                    temp.flush();
+                    QString tempPath = temp.fileName();
+                    temp.close();
+                    ::chmod(tempPath.toUtf8().constData(), 0755);
+                    QFile::remove(destination);
+                    QFile::rename(tempPath, destination);
+                }
+            }
+        }
+        imported.append(name);
+    }
+
+    QProcess updateProc;
+    updateProc.start("update-desktop-database", {data + "/applications"});
+    updateProc.waitForFinished(1000);
+
+    return imported;
+}
+
+} // namespace WinBridge

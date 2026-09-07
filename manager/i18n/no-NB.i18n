@@ -84,6 +84,13 @@
     "Are you sure you want to forcibly kill %1?": "Er du sikker på at du vil tvangsavslutte %1?",
     "Killing app …": "Avslutter app …",
     "App terminated.": "Appen ble avsluttet.",
-    "Could not terminate app.": "Kunne ikke avslutte appen."
+    "Could not terminate app.": "Kunne ikke avslutte appen.",
+    "All (%1)": "Alle (%1)",
+    "Active (%1)": "Aktive (%1)",
+    "ENVIRONMENT": "MILJØ",
+    "Windows C: Drive": "Windows C:-stasjon",
+    "Active Now": "Aktiv nå",
+    "Inactive": "Inaktiv",
+    "Open C: Drive": "Åpne C:-stasjon"
   }
 }

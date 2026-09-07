@@ -1,0 +1,110 @@
+name: Build & Package
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            libgl1-mesa-dev \
+            pkg-config \
+            xdg-user-dirs \
+            xdg-utils
+
+      - name: Run test suite
+        run: |
+          make test
+
+  package-deb-rpm:
+    name: Build DEB & RPM Packages
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build & packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            libgl1-mesa-dev \
+            pkg-config \
+            rpm \
+            dpkg-dev \
+            desktop-file-utils \
+            xdg-user-dirs \
+            xdg-utils
+
+      - name: Build DEB package
+        run: |
+          ./generate_release.sh --format deb
+
+      - name: Build RPM package
+        run: |
+          ./generate_release.sh --format rpm
+
+      - name: Upload DEB & RPM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: winbridge-deb-rpm-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/SHA256SUMS*
+          if-no-files-found: error
+
+  package-arch:
+    name: Build Arch Package
+    runs-on: ubuntu-latest
+    needs: test
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Arch dependencies
+        run: |
+          pacman -Syu --noconfirm cmake qt6-base git desktop-file-utils
+
+      - name: Build Arch Linux package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          useradd -m -u 1001 builder 2>/dev/null || useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c "./generate_release.sh --format arch"
+
+      - name: Upload Arch Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winbridge-arch-package
+          path: |
+            dist/*.pkg.tar.zst
+            dist/SHA256SUMS*
+          if-no-files-found: error

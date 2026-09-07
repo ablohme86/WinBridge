@@ -57,19 +57,14 @@ output_dir=$(cd -- "$output_dir" && pwd)
 work_dir=$(mktemp -d /tmp/winbridge-release.XXXXXXXX)
 trap 'rm -rf -- "$work_dir"' EXIT
 payload="$work_dir/payload"
-install -dm755 "$payload/usr/lib/winbridge" "$payload/usr/bin" "$payload/usr/share/applications" "$payload/usr/share/doc/winbridge"
-for module in winbridge.py shortcuts.py shared_space.py manager.py manager_backend.py; do
-    install -m644 "$project_dir/$module" "$payload/usr/lib/winbridge/$module"
-done
-cat > "$payload/usr/bin/winbridge" <<'EOF'
-#!/bin/sh
-exec /usr/bin/python3 /usr/lib/winbridge/winbridge.py "$@"
-EOF
-chmod 755 "$payload/usr/bin/winbridge"
+install -dm755 "$payload/usr/bin" "$payload/usr/share/applications" "$payload/usr/share/doc/winbridge"
 install -m644 "$project_dir/packaging/winbridge.desktop" "$payload/usr/share/applications/winbridge.desktop"
-cmake -S "$project_dir/manager" -B "$work_dir/manager-build" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$work_dir/manager-build" --parallel 2
-install -m755 "$work_dir/manager-build/winbridge-manager" "$payload/usr/bin/winbridge-manager"
+install -m644 "$project_dir/packaging/winbridge-manager.desktop" "$payload/usr/share/applications/winbridge-manager.desktop"
+cmake -S "$project_dir" -B "$work_dir/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$work_dir/build" --parallel 2
+install -m755 "$work_dir/build/winbridge" "$payload/usr/bin/winbridge"
+install -m755 "$work_dir/build/winbridge-backend" "$payload/usr/bin/winbridge-backend"
+install -m755 "$work_dir/build/manager/winbridge-manager" "$payload/usr/bin/winbridge-manager"
 qt_version=$(pkg-config --modversion Qt6Widgets)
 machine=$(uname -m)
 case "$machine" in
@@ -77,14 +72,11 @@ case "$machine" in
     aarch64) deb_arch=arm64;;
     *) echo "Unsupported build architecture: $machine" >&2; exit 1;;
 esac
-install -m644 "$project_dir/packaging/winbridge-manager.desktop" "$payload/usr/share/applications/winbridge-manager.desktop"
 install -Dm644 "$project_dir/assets/winbridge.png" "$payload/usr/share/pixmaps/winbridge.png"
 install -m644 "$project_dir/README.md" "$payload/usr/share/doc/winbridge/README.md"
 if [[ -f $project_dir/LICENSE ]]; then
     install -Dm644 "$project_dir/LICENSE" "$payload/usr/share/licenses/winbridge/LICENSE"
 fi
-python3 -m compileall -q -b "$payload/usr/lib/winbridge"
-find "$payload" -name '*.pyc' -delete
 if command -v desktop-file-validate >/dev/null; then
     desktop-file-validate "$payload/usr/share/applications/winbridge.desktop"
 fi
@@ -102,7 +94,7 @@ Section: utils
 Priority: optional
 Architecture: $deb_arch
 Maintainer: $maintainer
-Depends: libqt6widgets6 (>= $qt_version), libqt6gui6 (>= $qt_version), libqt6core6 (>= $qt_version), libstdc++6, libc6, python3 (>= 3.9), xdg-utils, xdg-user-dirs, zenity | kdialog
+Depends: libqt6widgets6 (>= $qt_version), libqt6gui6 (>= $qt_version), libqt6core6 (>= $qt_version), libstdc++6, libc6, xdg-utils, xdg-user-dirs, zenity | kdialog
 Recommends: desktop-file-utils
 Description: Run Windows programs in a shared Proton environment
  Select an installed Proton version once, run Windows executables and
@@ -134,7 +126,6 @@ License: $license
 BuildArch: $machine
 Source0: payload.tar.gz
 Requires: qt6-qtbase >= $qt_version
-Requires: python3 >= 3.9
 Requires: xdg-utils
 Requires: xdg-user-dirs
 Requires: (zenity or kdialog)
@@ -166,8 +157,8 @@ fi
 %files
 %defattr(-,root,root,-)
 /usr/bin/winbridge
+/usr/bin/winbridge-backend
 /usr/bin/winbridge-manager
-/usr/lib/winbridge/
 /usr/share/applications/winbridge.desktop
 /usr/share/applications/winbridge-manager.desktop
 /usr/share/pixmaps/winbridge.png
@@ -193,7 +184,7 @@ pkgrel=$release
 pkgdesc='Run Windows programs in a shared Proton environment'
 arch=('$machine')
 license=('$license')
-depends=('qt6-base>=$qt_version' 'gcc-libs' 'glibc' 'python>=3.9' 'xdg-utils' 'xdg-user-dirs' 'zenity')
+depends=('qt6-base>=$qt_version' 'gcc-libs' 'glibc' 'xdg-utils' 'xdg-user-dirs' 'zenity')
 optdepends=('kdialog: native KDE dialogs' 'steam: install Proton and Steam Linux Runtime')
 source=('payload.tar.gz')
 noextract=('payload.tar.gz')

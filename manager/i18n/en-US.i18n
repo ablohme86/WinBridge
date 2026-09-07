@@ -84,6 +84,13 @@
     "Are you sure you want to forcibly kill %1?": "Are you sure you want to forcibly kill %1?",
     "Killing app …": "Killing app …",
     "App terminated.": "App terminated.",
-    "Could not terminate app.": "Could not terminate app."
+    "Could not terminate app.": "Could not terminate app.",
+    "All (%1)": "All (%1)",
+    "Active (%1)": "Active (%1)",
+    "ENVIRONMENT": "ENVIRONMENT",
+    "Windows C: Drive": "Windows C: Drive",
+    "Active Now": "Active Now",
+    "Inactive": "Inactive",
+    "Open C: Drive": "Open C: Drive"
   }
 }

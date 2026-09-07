@@ -1,3 +1,21 @@
+/*
+    WinBridge v1.0
+    Copyright (c) 2026 A. Blohmè <alexander.blohme@gmail.com>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://gnu.org>.
+*/
+
 #include <QtWidgets>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -23,8 +41,10 @@ protected:
 class Manager : public QWidget {
     QListWidget *list;
     QLineEdit *search;
-    QLabel *count, *engine, *status, *detailName, *detailText, *badge, *empty;
+    QLabel *count, *engine, *status, *detailName, *detailText, *badge, *empty, *prefixLabel, *runningCountLabel;
     QPushButton *removeButton, *refreshButton, *folderButton, *configureButton, *killButton;
+    QPushButton *tabAll = nullptr, *tabRunning = nullptr;
+    QString currentFilter = "all";
     QProgressBar *progress;
     QProcess *process, *pollProcess;
     QTimer *pollTimer;
@@ -80,15 +100,22 @@ class Manager : public QWidget {
         removeButton->setEnabled(!value && !selectedKey.isEmpty());
         updateKillButtonState();
     }
+    void executeBackend(QProcess *proc, const QStringList &args) {
+        if (backend.endsWith(".py")) {
+            proc->start("/usr/bin/python3", QStringList{backend} + args);
+        } else {
+            proc->start(backend, args);
+        }
+    }
     void request(const QString &action, const QString &key = {}) {
         if (busy) return;
         pendingAction = action;
         output.clear();
         setBusy(true);
         status->setText(action == "list" ? T("Loading your library …") : T("The uninstall wizard is running. Follow the instructions in its window."));
-        QStringList args{backend, action};
+        QStringList args{action};
         if (!key.isEmpty()) args << "--key" << key;
-        process->start("/usr/bin/python3", args);
+        executeBackend(process, args);
     }
     void confirmAndKill(const QString &key, const QString &name) {
         if (busy) return;
@@ -108,7 +135,7 @@ class Manager : public QWidget {
         setBusy(true);
         status->setText(T("Killing app …"));
         auto *p = new QProcess(this);
-        QStringList args{backend, "kill", "--key", key};
+        QStringList args{"kill", "--key", key};
         connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p, key](int code, QProcess::ExitStatus) {
             setBusy(false);
             QByteArray resData = p->readAllStandardOutput();
@@ -130,16 +157,16 @@ class Manager : public QWidget {
             p->deleteLater();
             pollRunning();
         });
-        p->start("/usr/bin/python3", args);
+        executeBackend(p, args);
     }
     void pollRunning() {
         if (busy || !pollProcess || pollProcess->state() != QProcess::NotRunning || backend.isEmpty() || programs.isEmpty()) return;
-        pollProcess->start("/usr/bin/python3", QStringList{backend, "running"});
+        executeBackend(pollProcess, QStringList{"running"});
     }
     void toggleShortcut(const QString &id, const QString &target, bool enabled) {
         status->setText(T("Updating shortcut …"));
         auto *p = new QProcess(this);
-        QStringList args{backend, "toggle_shortcut", "--id", id, "--" + target, enabled ? "1" : "0"};
+        QStringList args{"toggle_shortcut", "--id", id, "--" + target, enabled ? "1" : "0"};
         connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p](int code, QProcess::ExitStatus) {
             if (code == 0) {
                 status->setText(T("Shortcut updated."));
@@ -148,17 +175,29 @@ class Manager : public QWidget {
             }
             p->deleteLater();
         });
-        p->start("/usr/bin/python3", args);
+        executeBackend(p, args);
     }
     void render() {
         QString previous = selectedKey;
         list->clear();
         selectedKey.clear();
         int visible = 0;
+        int runningCount = 0;
+        for (const auto &value : programs) {
+            if (value.toObject()["running"].toBool()) runningCount++;
+        }
+
+        if (tabAll) tabAll->setText(T("All (%1)").arg(programs.size()));
+        if (tabRunning) tabRunning->setText(T("Active (%1)").arg(runningCount));
+
         for (const auto &value : programs) {
             auto p = value.toObject();
             QString name = p["name"].toString(), key = p["key"].toString();
+            bool isRunning = p["running"].toBool();
+
+            if (currentFilter == "running" && !isRunning) continue;
             if (!name.contains(search->text(), Qt::CaseInsensitive)) continue;
+
             auto *item = new QListWidgetItem(list);
             item->setData(Qt::UserRole, key);
             item->setData(Qt::UserRole + 1, name);
@@ -170,22 +209,25 @@ class Manager : public QWidget {
             mainLayout->setSpacing(0);
 
             auto *header = new ClickableWidget(item, list);
+            header->setObjectName("itemCard");
             auto *headerLayout = new QHBoxLayout(header);
-            headerLayout->setContentsMargins(18, 10, 20, 10);
+            headerLayout->setContentsMargins(18, 12, 18, 12);
+            headerLayout->setSpacing(14);
+
             auto *icon = label(name.left(1).toUpper(), "appIcon");
             icon->setAlignment(Qt::AlignCenter);
-            icon->setFixedSize(44, 44);
-            showAppIcon(icon, p["icon"].toString(), name.left(1).toUpper(), 36);
+            icon->setFixedSize(46, 46);
+            showAppIcon(icon, p["icon"].toString(), name.left(1).toUpper(), 38);
             headerLayout->addWidget(icon);
+
             auto *texts = new QVBoxLayout;
-            texts->setSpacing(5);
+            texts->setSpacing(4);
             auto *title = label(name, "appName");
             title->setToolTip(name);
             texts->addWidget(title);
             texts->addWidget(label(T("Windows app  ·  Shared environment"), "muted"));
             headerLayout->addLayout(texts, 1);
 
-            bool isRunning = p["running"].toBool();
             if (isRunning) {
                 auto *runBadge = label(T("●  Running"), "running");
                 headerLayout->addWidget(runBadge);
@@ -217,7 +259,7 @@ class Manager : public QWidget {
                 panel = new QFrame;
                 panel->setObjectName("shortcutsPanel");
                 auto *panelLayout = new QVBoxLayout(panel);
-                panelLayout->setContentsMargins(76, 4, 20, 12);
+                panelLayout->setContentsMargins(76, 6, 20, 14);
                 panelLayout->setSpacing(8);
 
                 for (const auto &scVal : shortcuts) {
@@ -233,7 +275,7 @@ class Manager : public QWidget {
 
                     auto *miniIcon = label(scName.left(1).toUpper(), "miniAppIcon");
                     miniIcon->setAlignment(Qt::AlignCenter);
-                    miniIcon->setFixedSize(22, 22);
+                    miniIcon->setFixedSize(24, 24);
                     showAppIcon(miniIcon, scIcon, scName.left(1).toUpper(), 18);
                     scRow->addWidget(miniIcon);
 
@@ -297,8 +339,18 @@ class Manager : public QWidget {
         selectedKey = item ? item->data(Qt::UserRole).toString() : QString();
         QString name = item ? item->data(Qt::UserRole + 1).toString() : T("Select an app");
         detailName->setText(name);
-        showAppIcon(badge, item ? item->data(Qt::UserRole + 2).toString() : QString(), item ? name.left(1).toUpper() : "W", 60);
-        detailText->setText(item ? T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.") : T("Your Windows apps, all in one place."));
+        showAppIcon(badge, item ? item->data(Qt::UserRole + 2).toString() : QString(), item ? name.left(1).toUpper() : "W", 64);
+        bool isRunning = false;
+        if (item) {
+            for (const auto &val : programs) {
+                auto obj = val.toObject();
+                if (obj["key"].toString() == selectedKey) {
+                    isRunning = obj["running"].toBool();
+                    break;
+                }
+            }
+        }
+        detailText->setText(item ? (isRunning ? (T("Active Now") + "  ·  " + T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.")) : T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.")) : T("Your Windows apps, all in one place."));
         removeButton->setEnabled(item && !busy);
         updateKillButtonState();
     }
@@ -317,6 +369,14 @@ class Manager : public QWidget {
         prefix = result["prefix"].toString();
         folderButton->setEnabled(QDir(prefix + "/pfx/drive_c").exists());
         folderButton->setToolTip(prefix + "/pfx/drive_c");
+        if (prefixLabel) {
+            QString displayPrefix = prefix;
+            if (displayPrefix.startsWith(QDir::homePath())) {
+                displayPrefix.replace(0, QDir::homePath().length(), "~");
+            }
+            prefixLabel->setText(displayPrefix);
+            prefixLabel->setToolTip(prefix);
+        }
         engine->setText(T(result["proton"].toString()));
         engine->setToolTip(result["proton"].toString());
         programs = result["programs"].toArray();
@@ -342,160 +402,306 @@ protected:
         }
     }
 public:
-    Manager(const QString &backendPath, bool preview = false) : backend(backendPath), screenshot(preview) {
+    Manager(const QString &backendPath, bool preview = false, bool demo = false) : backend(backendPath), screenshot(preview) {
         setWindowTitle("WinBridge Manager");
         setWindowIcon(QIcon(":/assets/winbridge.png"));
-        resize(1180, 760);
-        setMinimumSize(1000, 660);
+        resize(1200, 780);
+        setMinimumSize(1020, 680);
         setStyleSheet(R"(
-            QWidget { background: #10131c; color: #e9edf6; font-family: 'Noto Sans'; font-size: 13px; }
-            QFrame#sidebar { background: #151925; border-right: 1px solid #272c3e; }
+            QWidget { background: #0c0f17; color: #e2e8f0; font-family: 'Noto Sans', 'Segoe UI', sans-serif; font-size: 13px; }
+            QFrame#topNav { background: #111520; border-bottom: 1px solid #1c2333; }
             QLabel { background: transparent; }
-            QLabel#brand { font-size: 24px; font-weight: 800; letter-spacing: -1px; }
-            QLabel#eyebrow { color: #8994b2; font-size: 10px; font-weight: 700; letter-spacing: 2px; }
-            QLabel#heading { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
-            QLabel#muted { color: #8e99b1; font-size: 12px; }
-            QLabel#count { font-size: 30px; font-weight: 700; }
-            QLabel#engine { font-size: 16px; font-weight: 600; }
-            QFrame#card { background: #191e2c; border: 1px solid #2b3246; border-radius: 14px; }
-            QFrame#detail { background: #151a26; border: 1px solid #2b3246; border-radius: 14px; }
-            QLabel#appIcon, QLabel#badge { background: #303052; color: #c3b9ff; border-radius: 12px; font-weight: 700; font-size: 22px; }
-            QLabel#badge { font-size: 36px; border-radius: 18px; }
-            QLabel#appName { font-size: 14px; font-weight: 600; }
-            QLabel#installed { color: #74d8b4; font-size: 11px; }
-            QLabel#detailName { font-size: 20px; font-weight: 700; }
-            QPushButton { background: #22293a; border: 1px solid #333d54; border-radius: 9px; padding: 11px 16px; font-weight: 600; }
-            QPushButton:hover { background: #30394f; border-color: #6973a0; }
-            QPushButton:focus { border: 1px solid #a899ff; }
-            QPushButton:disabled { color: #58627c; background: #1a1f2d; border-color: #282e40; }
-            QPushButton#nav { background: #2b2947; border: 1px solid #46406b; color: #cfc5ff; text-align: left; }
-            QPushButton#primary { background: #8970ef; color: #ffffff; border: 0; }
-            QPushButton#primary:hover { background: #a087ff; }
-            QPushButton#danger { background: #34222e; color: #f9a0b7; border: 1px solid #5b3347; }
-            QPushButton#danger:disabled { background: #1a1f2d; color: #58627c; border-color: #282e40; }
-            QComboBox { background: #22293a; color: #e9edf6; border: 1px solid #3b4560; border-radius: 8px; padding: 12px; min-width: 180px; }
-            QComboBox QAbstractItemView { background: #22293a; selection-background-color: #514274; }
-            QLineEdit { background: #191e2c; border: 1px solid #30384e; border-radius: 10px; padding: 13px 16px; selection-background-color: #7461bd; }
-            QLineEdit:focus { border-color: #a899ff; }
-            QListWidget { background: transparent; border: 0; outline: 0; }
-            QListWidget::item { background: #191e2c; border: 1px solid #2a3143; border-radius: 11px; margin-bottom: 8px; }
-            QListWidget::item:selected { background: #292642; border: 1px solid #8a75d1; }
-            QListWidget::item:hover { border-color: #5b617c; }
-            QScrollBar:vertical { background: #151925; width: 8px; border-radius: 4px; }
-            QScrollBar::handle:vertical { background: #3b445d; min-height: 30px; border-radius: 4px; }
+            QLabel#brand { font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; }
+            QLabel#brandSub { font-size: 10px; font-weight: 700; color: #8595b3; letter-spacing: 1.5px; }
+            QLabel#eyebrow { color: #818ea8; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; }
+            QLabel#heading { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff; }
+            QLabel#muted { color: #8290ab; font-size: 12px; }
+            QLabel#count { font-size: 26px; font-weight: 800; color: #ffffff; }
+            QLabel#engine { font-size: 15px; font-weight: 700; color: #d8b4fe; }
+            QLabel#envPath { font-size: 13px; font-weight: 600; color: #93c5fd; }
+            QFrame#heroBanner { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #131724, stop:0.5 #161b2a, stop:1 #131724); border: 1px solid #202738; border-radius: 14px; }
+            QFrame#statCard { background: #0e121c; border: 1px solid #1c2333; border-radius: 10px; padding: 4px; }
+            QFrame#detail { background: #121622; border: 1px solid #1e2638; border-radius: 16px; }
+            QLabel#appIcon { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2b274c, stop:1 #1a1833); color: #c4b5fd; border: 1px solid #3d376b; border-radius: 12px; font-weight: 800; font-size: 20px; }
+            QLabel#badge { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #35305c, stop:1 #1e1b38); color: #c4b5fd; border: 2px solid #54498a; border-radius: 18px; font-size: 38px; font-weight: 800; }
+            QLabel#appName { font-size: 15px; font-weight: 700; color: #f8fafc; }
+            QLabel#installed { background: #0f2321; color: #34d399; border: 1px solid #164e43; border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+            QLabel#running { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #064e3b, stop:1 #065f46); color: #4ade80; border: 1px solid #10b981; border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 800; }
+            QLabel#detailName { font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; }
+            QPushButton { background: #181d2a; border: 1px solid #283144; border-radius: 9px; padding: 8px 14px; font-weight: 600; font-size: 12px; color: #e2e8f0; }
+            QPushButton:hover { background: #22293b; border-color: #3e4d69; color: #ffffff; }
+            QPushButton:focus { border-color: #8b5cf6; }
+            QPushButton:disabled { color: #4c576e; background: #11141e; border-color: #1a1f2c; }
+            QPushButton#primary { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7c3aed, stop:1 #6d28d9); border: 1px solid #8b5cf6; color: #ffffff; font-weight: 700; }
+            QPushButton#primary:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #7c3aed); border-color: #a78bfa; }
+            QPushButton#danger { background: #26151e; color: #fb7185; border: 1px solid #4c2032; font-weight: 600; }
+            QPushButton#danger:hover { background: #38192a; color: #ffffff; border-color: #792849; }
+            QPushButton#danger:disabled { background: #11141e; color: #4c576e; border-color: #1a1f2c; }
+            QPushButton#itemKill, QPushButton#killAppButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4c0519, stop:1 #350715); border: 1px solid #e11d48; border-radius: 7px; padding: 4px 11px; color: #fda4af; font-size: 11px; font-weight: 700; }
+            QPushButton#itemKill:hover, QPushButton#killAppButton:hover { background: #881337; border-color: #f43f5e; color: #ffffff; }
+            QPushButton#killAppButton:disabled { background: #11141e; border-color: #1a1f2c; color: #4c576e; }
+            QPushButton#filterTab { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 12px; color: #8290ab; }
+            QPushButton#filterTab:hover { background: #181d2a; color: #f1f5f9; }
+            QPushButton#filterTab:checked { background: #221f3d; border: 1px solid #5c43c2; color: #c4b5fd; }
+            QPushButton#shortcutToggle { background: #141824; border: 1px solid #232a3b; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #8e9bb5; }
+            QPushButton#shortcutToggle:hover { background: #1c2233; color: #f8fafc; border-color: #384560; }
+            QPushButton#shortcutToggle:disabled { color: #475569; background: #10131c; border-color: #181c26; }
+            QFrame#shortcutsPanel { background: #0c0f16; border-top: 1px solid #1a202d; border-radius: 0 0 14px 14px; padding: 8px 16px 12px 16px; }
+            QLabel#miniAppIcon { background: #221e3a; color: #c4b5fd; border-radius: 6px; font-weight: 700; font-size: 11px; }
+            QLabel#shortcutName { font-size: 12px; font-weight: 600; color: #e2e8f0; }
+            QCheckBox { color: #8290ab; spacing: 6px; font-size: 11px; font-weight: 600; }
+            QCheckBox:hover { color: #e2e8f0; }
+            QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #2d374d; border-radius: 4px; background: #141824; }
+            QCheckBox::indicator:hover { border-color: #8b5cf6; }
+            QCheckBox::indicator:checked { background: #7c3aed; border-color: #a78bfa; }
+            QLineEdit#search { background: #121622; border: 1px solid #222a3a; border-radius: 10px; padding: 8px 14px; selection-background-color: #6d28d9; color: #f8fafc; }
+            QLineEdit#search:focus { border-color: #8b5cf6; background: #161b29; }
+            QListWidget#programList { background: transparent; border: 0; outline: 0; }
+            QListWidget#programList::item { background: #131722; border: 1px solid #1e2637; border-radius: 13px; margin-bottom: 8px; }
+            QListWidget#programList::item:selected { background: #211e3b; border: 1px solid #7c5cfc; }
+            QListWidget#programList::item:hover { border-color: #37435e; }
+            QScrollBar:vertical { background: #0c0f17; width: 6px; border-radius: 3px; }
+            QScrollBar::handle:vertical { background: #2a3346; min-height: 25px; border-radius: 3px; }
+            QScrollBar::handle:vertical:hover { background: #475775; }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-            QProgressBar { border: 0; background: #252b3e; max-height: 3px; }
-            QProgressBar::chunk { background: #a48bff; }
-            QFrame#shortcutsPanel { background: #131722; border-top: 1px solid #232838; border-radius: 0 0 11px 11px; padding: 6px 12px 10px 12px; }
-            QLabel#miniAppIcon { background: #2b2b48; color: #b8adff; border-radius: 6px; font-weight: 700; font-size: 11px; }
-            QLabel#shortcutName { font-size: 12px; font-weight: 600; color: #d6dce9; }
-            QCheckBox { color: #8e99b1; spacing: 6px; font-size: 11px; font-weight: 600; }
-            QCheckBox:hover { color: #e9edf6; }
-            QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #38425d; border-radius: 4px; background: #191e2c; }
-            QCheckBox::indicator:hover { border-color: #8970ef; }
-            QCheckBox::indicator:checked { background: #8970ef; border-color: #a48bff; }
-            QPushButton#shortcutToggle { background: #1f2536; border: 1px solid #333d54; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #a4b1cd; }
-            QPushButton#shortcutToggle:hover { background: #2c354c; color: #ffffff; border-color: #6973a0; }
-            QPushButton#shortcutToggle:disabled { color: #58627c; background: #171b26; border-color: #242938; }
-            QLabel#running { color: #34d399; font-size: 11px; font-weight: 700; }
-            QPushButton#itemKill { background: #381f2a; color: #ff9bbb; border: 1px solid #5c2d40; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
-            QPushButton#itemKill:hover { background: #4d2637; color: #ffffff; border-color: #853e5d; }
-            QPushButton#killAppButton { background: #381f2a; color: #ff9bbb; border: 1px solid #5c2d40; }
-            QPushButton#killAppButton:hover { background: #4d2637; color: #ffffff; border-color: #853e5d; }
-            QPushButton#killAppButton:disabled { background: #1a1f2d; color: #58627c; border-color: #282e40; }
+            QProgressBar { border: 0; background: #161b28; max-height: 2px; }
+            QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7c3aed, stop:1 #38bdf8); }
         )");
-        auto *outer = new QHBoxLayout(this); outer->setContentsMargins(0,0,0,0); outer->setSpacing(0);
-        auto *sidebar = new QFrame; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(214);
-        auto *side = new QVBoxLayout(sidebar); side->setContentsMargins(24,32,24,26); side->setSpacing(18);
-        auto *brandIcon = new QLabel; brandIcon->setPixmap(QPixmap(":/assets/winbridge.png").scaled(56,56,Qt::KeepAspectRatio,Qt::SmoothTransformation));
-        side->addWidget(brandIcon); side->addWidget(label("WinBridge", "brand"));
-        side->addWidget(label("MANAGER", "eyebrow")); side->addSpacing(36);
-        auto *nav = button(T("▦   Apps"), "nav"); side->addWidget(nav);
-        side->addWidget(label(T("YOUR WORKSPACE"), "eyebrow"));
-        auto *sideInfo = label(T("Windows apps.\nAt home on Linux."), "muted"); sideInfo->setWordWrap(true); side->addWidget(sideInfo);
-        side->addStretch();
-        side->addWidget(label(T("●  One shared environment"), "installed"));
-        auto *foot = label(T("Your apps and data,\ntogether in one place."), "muted"); side->addWidget(foot);
-        outer->addWidget(sidebar);
-        auto *main = new QVBoxLayout; main->setContentsMargins(32,30,32,24); main->setSpacing(22); outer->addLayout(main,1);
-        auto *top = new QHBoxLayout;
-        auto *titles = new QVBoxLayout; titles->setSpacing(6);
-        titles->addWidget(label(T("YOUR WINDOWS LIBRARY"), "eyebrow"));
-        titles->addWidget(label(T("Apps"), "heading"));
-        titles->addWidget(label(T("Everything you’ve installed. One place to manage it."), "muted"));
-        top->addLayout(titles,1); refreshButton=button(T("↻  Refresh")); top->addWidget(refreshButton); main->addLayout(top);
-        auto *stats = new QHBoxLayout; stats->setSpacing(14);
-        auto makeCard=[&](const QString &title, QLabel *value){ auto *f=new QFrame; f->setObjectName("card"); auto *l=new QVBoxLayout(f); l->setContentsMargins(20,16,20,16); l->addWidget(label(title,"eyebrow")); l->addWidget(value); return f; };
-        count=label("—","count"); engine=label(T("Loading …"),"engine"); engine->setWordWrap(true);
-        stats->addWidget(makeCard(T("INSTALLED APPS"),count),1);
-        stats->addWidget(makeCard(T("PROTON VERSION"),engine),2); main->addLayout(stats);
-        search=new QLineEdit; search->setObjectName("search"); search->setPlaceholderText(T("Search for an app …")); search->setClearButtonEnabled(true); main->addWidget(search);
-        auto *body=new QHBoxLayout; body->setSpacing(18);
-        auto *left=new QVBoxLayout; list=new QListWidget; list->setObjectName("programList"); list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); left->addWidget(list);
-        empty=label(T("Loading your apps …"),"muted"); empty->setAlignment(Qt::AlignCenter); empty->setWordWrap(true); left->addWidget(empty,1); body->addLayout(left,1);
-        auto *detail=new QFrame; detail->setObjectName("detail"); detail->setFixedWidth(248);
-        auto *dl=new QVBoxLayout(detail); dl->setContentsMargins(22,24,22,22); dl->setSpacing(18);
-        badge=label("W","badge"); badge->setAlignment(Qt::AlignCenter); badge->setFixedSize(72,72); dl->addWidget(badge);
-        detailName=label(T("Select an app"),"detailName"); detailName->setWordWrap(true); dl->addWidget(detailName);
-        detailText=label(T("Your Windows apps, all in one place."),"muted"); detailText->setWordWrap(true); dl->addWidget(detailText);
+
+        auto *windowLayout = new QVBoxLayout(this);
+        windowLayout->setContentsMargins(0, 0, 0, 0);
+        windowLayout->setSpacing(0);
+
+        // 1. Top Navigation Bar
+        auto *topNav = new QFrame; topNav->setObjectName("topNav");
+        auto *navLayout = new QHBoxLayout(topNav);
+        navLayout->setContentsMargins(24, 14, 24, 14);
+        navLayout->setSpacing(16);
+
+        auto *brandLogo = new QLabel;
+        brandLogo->setPixmap(QPixmap(":/assets/winbridge.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        navLayout->addWidget(brandLogo);
+
+        auto *brandTitles = new QVBoxLayout; brandTitles->setSpacing(1);
+        auto *brandTitle = label("WinBridge", "brand");
+        auto *brandSub = label("PRO APP MANAGER", "brandSub");
+        brandTitles->addWidget(brandTitle); brandTitles->addWidget(brandSub);
+        navLayout->addLayout(brandTitles);
+
+        navLayout->addSpacing(16);
+
+        // Filter pills (All / Active)
+        tabAll = button(T("All (%1)").arg(0), "filterTab");
+        tabAll->setCheckable(true); tabAll->setChecked(true);
+        tabRunning = button(T("Active (%1)").arg(0), "filterTab");
+        tabRunning->setCheckable(true);
+        navLayout->addWidget(tabAll);
+        navLayout->addWidget(tabRunning);
+
+        connect(tabAll, &QPushButton::clicked, this, [this] {
+            tabAll->setChecked(true);
+            tabRunning->setChecked(false);
+            currentFilter = "all";
+            render();
+        });
+        connect(tabRunning, &QPushButton::clicked, this, [this] {
+            tabRunning->setChecked(true);
+            tabAll->setChecked(false);
+            currentFilter = "running";
+            render();
+        });
+
+        navLayout->addStretch();
+
+        search = new QLineEdit;
+        search->setObjectName("search");
+        search->setPlaceholderText(T("Search for an app …"));
+        search->setClearButtonEnabled(true);
+        search->setFixedWidth(240);
+        navLayout->addWidget(search);
+
+        refreshButton = button(T("↻  Refresh"));
+        navLayout->addWidget(refreshButton);
+
+        folderButton = button(T("Open C: Drive"));
+        folderButton->setEnabled(false);
+        navLayout->addWidget(folderButton);
+
+        configureButton = button(T("Settings"));
+        navLayout->addWidget(configureButton);
+
+        windowLayout->addWidget(topNav);
+
+        // 2. Main Content Canvas
+        auto *contentArea = new QVBoxLayout;
+        contentArea->setContentsMargins(24, 18, 24, 16);
+        contentArea->setSpacing(14);
+        windowLayout->addLayout(contentArea, 1);
+
+        // Hero System Deck Banner
+        auto *heroBanner = new QFrame; heroBanner->setObjectName("heroBanner");
+        auto *heroLayout = new QHBoxLayout(heroBanner);
+        heroLayout->setContentsMargins(18, 12, 18, 12);
+        heroLayout->setSpacing(16);
+
+        auto makeDeckCard = [&](const QString &eyebrowText, QLabel *valueWidget) {
+            auto *card = new QFrame; card->setObjectName("statCard");
+            auto *cardLayout = new QVBoxLayout(card);
+            cardLayout->setContentsMargins(16, 10, 16, 10);
+            cardLayout->setSpacing(3);
+            cardLayout->addWidget(label(eyebrowText, "eyebrow"));
+            cardLayout->addWidget(valueWidget);
+            return card;
+        };
+
+        count = label("0", "count");
+        engine = label(T("Loading …"), "engine"); engine->setWordWrap(true);
+        prefixLabel = label("~/.local/share/winbridge/shared", "envPath"); prefixLabel->setWordWrap(true);
+
+        heroLayout->addWidget(makeDeckCard(T("INSTALLED APPS"), count), 1);
+        heroLayout->addWidget(makeDeckCard(T("PROTON VERSION"), engine), 2);
+        heroLayout->addWidget(makeDeckCard(T("ENVIRONMENT"), prefixLabel), 2);
+        contentArea->addWidget(heroBanner);
+
+        // Main Body Split (Library on left, Detail on right)
+        auto *body = new QHBoxLayout; body->setSpacing(18);
+
+        auto *left = new QVBoxLayout; left->setSpacing(0);
+        list = new QListWidget; list->setObjectName("programList");
+        list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        left->addWidget(list);
+        empty = label(T("Loading your apps …"), "muted");
+        empty->setAlignment(Qt::AlignCenter); empty->setWordWrap(true);
+        left->addWidget(empty, 1);
+        body->addLayout(left, 1);
+
+        // Right Detail Inspector Panel
+        auto *detail = new QFrame; detail->setObjectName("detail"); detail->setFixedWidth(270);
+        auto *dl = new QVBoxLayout(detail); dl->setContentsMargins(22, 24, 22, 22); dl->setSpacing(14);
+
+        badge = label("W", "badge"); badge->setAlignment(Qt::AlignCenter); badge->setFixedSize(76, 76);
+        dl->addWidget(badge, 0, Qt::AlignCenter);
+
+        detailName = label(T("Select an app"), "detailName"); detailName->setWordWrap(true); detailName->setAlignment(Qt::AlignCenter);
+        dl->addWidget(detailName);
+
+        detailText = label(T("Your Windows apps, all in one place."), "muted"); detailText->setWordWrap(true); detailText->setAlignment(Qt::AlignCenter);
+        dl->addWidget(detailText);
+
         dl->addStretch();
-        killButton=button(T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
-        removeButton=button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton); body->addWidget(detail); main->addLayout(body,1);
-        auto *actions=new QHBoxLayout; folderButton=button(T("Open Windows folder")); folderButton->setEnabled(false); configureButton=button(T("Settings")); actions->addWidget(folderButton); actions->addWidget(configureButton); actions->addStretch(); main->addLayout(actions);
-        progress=new QProgressBar; progress->setRange(0,0); progress->setTextVisible(false); progress->hide(); main->addWidget(progress);
-        status=label(T("Ready"), "muted"); status->setWordWrap(true); main->addWidget(status);
-        process=new QProcess(this);
-        connect(process,&QProcess::readyReadStandardOutput,this,[this]{output+=process->readAllStandardOutput();});
-        connect(process,&QProcess::readyReadStandardError,this,[this]{process->readAllStandardError();});
-        connect(process,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,&Manager::finished);
-        connect(process,&QProcess::errorOccurred,this,[this](QProcess::ProcessError e){if(e==QProcess::FailedToStart){setBusy(false);status->setText(T("Could not start the WinBridge integration: ") + process->errorString());}});
-        connect(search,&QLineEdit::textChanged,this,[this]{render();});
-        connect(list,&QListWidget::currentItemChanged,this,[this]{updateSelection();});
-        connect(refreshButton,&QPushButton::clicked,this,[this]{request("list");});
-        connect(nav,&QPushButton::clicked,search,qOverload<>(&QWidget::setFocus));
-        connect(folderButton,&QPushButton::clicked,this,[this]{QDesktopServices::openUrl(QUrl::fromLocalFile(prefix+"/pfx/drive_c"));});
-        connect(configureButton,&QPushButton::clicked,this,[this]{showSettings();});
-        connect(killButton,&QPushButton::clicked,this,[this]{
-            if(selectedKey.isEmpty()||busy)return;
-            confirmAndKill(selectedKey,detailName->text());
+
+        killButton = button(T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
+        removeButton = button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton);
+
+        body->addWidget(detail);
+        contentArea->addLayout(body, 1);
+
+        // Footer status bar & progress
+        progress = new QProgressBar; progress->setRange(0, 0); progress->setTextVisible(false); progress->hide();
+        contentArea->addWidget(progress);
+
+        status = label(T("Ready"), "muted"); status->setWordWrap(true);
+        contentArea->addWidget(status);
+
+        process = new QProcess(this);
+        connect(process, &QProcess::readyReadStandardOutput, this, [this] { output += process->readAllStandardOutput(); });
+        connect(process, &QProcess::readyReadStandardError, this, [this] { process->readAllStandardError(); });
+        connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &Manager::finished);
+        connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+            if (e == QProcess::FailedToStart) {
+                setBusy(false);
+                status->setText(T("Could not start the WinBridge integration: ") + process->errorString());
+            }
         });
-        connect(removeButton,&QPushButton::clicked,this,[this]{
-            if(selectedKey.isEmpty()||busy)return;
-            QMessageBox box(QMessageBox::Question,T("Uninstall app"), T("Uninstall “%1”?\n\nThe app’s own uninstall wizard will open.").arg(detailName->text()),QMessageBox::NoButton,this);
-            auto *cancel=box.addButton(T("Cancel"),QMessageBox::RejectRole); auto *yes=box.addButton(T("Uninstall"),QMessageBox::AcceptRole);box.setDefaultButton(cancel);box.exec();
-            if(box.clickedButton()==yes)request("uninstall",selectedKey);
+        connect(search, &QLineEdit::textChanged, this, [this] { render(); });
+        connect(list, &QListWidget::currentItemChanged, this, [this] { updateSelection(); });
+        connect(refreshButton, &QPushButton::clicked, this, [this] { request("list"); });
+        connect(folderButton, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl::fromLocalFile(prefix + "/pfx/drive_c")); });
+        connect(configureButton, &QPushButton::clicked, this, [this] { showSettings(); });
+        connect(killButton, &QPushButton::clicked, this, [this] {
+            if (selectedKey.isEmpty() || busy) return;
+            confirmAndKill(selectedKey, detailName->text());
         });
-        pollProcess=new QProcess(this);
-        connect(pollProcess,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus){
-            if(code==0&&!busy){
-                auto doc=QJsonDocument::fromJson(pollProcess->readAllStandardOutput());
-                if(doc.isObject()){
-                    auto runningMap=doc.object()["running"].toObject();
-                    bool changed=false;
-                    for(int i=0;i<programs.size();++i){
-                        auto obj=programs[i].toObject();
-                        QString k=obj["key"].toString();
-                        if(runningMap.contains(k)){
-                            bool isRun=runningMap[k].toBool();
-                            if(obj["running"].toBool()!=isRun){
-                                obj["running"]=isRun;
-                                programs[i]=obj;
-                                changed=true;
+        connect(removeButton, &QPushButton::clicked, this, [this] {
+            if (selectedKey.isEmpty() || busy) return;
+            QMessageBox box(QMessageBox::Question, T("Uninstall app"), T("Uninstall “%1”?\n\nThe app’s own uninstall wizard will open.").arg(detailName->text()), QMessageBox::NoButton, this);
+            auto *cancel = box.addButton(T("Cancel"), QMessageBox::RejectRole);
+            auto *yes = box.addButton(T("Uninstall"), QMessageBox::AcceptRole);
+            box.setDefaultButton(cancel);
+            box.exec();
+            if (box.clickedButton() == yes) request("uninstall", selectedKey);
+        });
+
+        pollProcess = new QProcess(this);
+        connect(pollProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this](int code, QProcess::ExitStatus) {
+            if (code == 0 && !busy) {
+                auto doc = QJsonDocument::fromJson(pollProcess->readAllStandardOutput());
+                if (doc.isObject()) {
+                    auto runningMap = doc.object()["running"].toObject();
+                    bool changed = false;
+                    for (int i = 0; i < programs.size(); ++i) {
+                        auto obj = programs[i].toObject();
+                        QString k = obj["key"].toString();
+                        if (runningMap.contains(k)) {
+                            bool isRun = runningMap[k].toBool();
+                            if (obj["running"].toBool() != isRun) {
+                                obj["running"] = isRun;
+                                programs[i] = obj;
+                                changed = true;
                             }
                         }
                     }
-                    if(changed)render();
+                    if (changed) render();
                 }
             }
         });
-        pollTimer=new QTimer(this);
+        pollTimer = new QTimer(this);
         pollTimer->setInterval(3000);
-        connect(pollTimer,&QTimer::timeout,this,[this]{pollRunning();});
-        if (!screenshot) {
+        connect(pollTimer, &QTimer::timeout, this, [this] { pollRunning(); });
+        if (!screenshot && !demo) {
             pollTimer->start();
-            QTimer::singleShot(0,this,[this]{request("list");});
+            QTimer::singleShot(0, this, [this] { request("list"); });
+        } else if (demo) {
+            engine->setText("GE-Proton9-25");
+            programs = {
+                QJsonObject{
+                    {"key", "notepad-plus-plus"},
+                    {"name", "Notepad++"},
+                    {"running", true},
+                    {"pids", QJsonArray{14201}},
+                    {"shortcuts", QJsonArray{
+                        QJsonObject{{"id", "notepad-plus-plus"}, {"name", "Notepad++"}, {"desktop", true}, {"menu", true}}
+                    }}
+                },
+                QJsonObject{
+                    {"key", "7zip"},
+                    {"name", "7-Zip File Manager"},
+                    {"running", false},
+                    {"pids", QJsonArray{}},
+                    {"shortcuts", QJsonArray{
+                        QJsonObject{{"id", "7zip-fm"}, {"name", "7-Zip File Manager"}, {"desktop", false}, {"menu", true}}
+                    }}
+                },
+                QJsonObject{
+                    {"key", "affinity-photo"},
+                    {"name", "Affinity Photo 2"},
+                    {"running", false},
+                    {"pids", QJsonArray{}},
+                    {"shortcuts", QJsonArray{
+                        QJsonObject{{"id", "affinity-photo-2"}, {"name", "Affinity Photo 2"}, {"desktop", true}, {"menu", true}}
+                    }}
+                }
+            };
+            expandedKeys.insert("notepad-plus-plus");
+            render();
+            if (list->count() > 0) {
+                list->setCurrentRow(0);
+            }
+        } else {
+            engine->setText(T("Not selected"));
+            render();
+            status->setText(T("Your environment is created when you first open an .exe file with WinBridge."));
         }
-        else {engine->setText(T("Not selected"));render();status->setText(T("Your environment is created when you first open an .exe file with WinBridge."));}
     }
 };
 
@@ -504,18 +710,27 @@ int main(int argc, char **argv) {
     QApplication app(argc,argv);
     app.setWindowIcon(QIcon(":/assets/winbridge.png"));
     app.setApplicationName("WinBridge Manager"); app.setDesktopFileName("winbridge-manager");
-    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.process(app);
+    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.addOption({"demo","Populate with demo data for preview"});parser.addOption({"snapshot","Render a live library snapshot and exit","path"});parser.process(app);
     QString backend=parser.value("backend");
     if(backend.isEmpty()) {
         QDir bin(QCoreApplication::applicationDirPath());
-        QStringList candidates{bin.filePath("manager_backend.py"),bin.filePath("../../manager_backend.py"),bin.filePath("../lib/winbridge/manager_backend.py")};
+        QStringList candidates{
+            bin.filePath("winbridge-backend"),
+            bin.filePath("../winbridge-backend"),
+            "/usr/local/bin/winbridge-backend",
+            "/usr/bin/winbridge-backend",
+            bin.filePath("manager_backend.py"),
+            bin.filePath("../../manager_backend.py"),
+            bin.filePath("../lib/winbridge/manager_backend.py")
+        };
         for(const auto &candidate:candidates)if(QFileInfo::exists(candidate)){backend=QFileInfo(candidate).absoluteFilePath();break;}
     }
     int exitCode;
     do {
     I18n::load(QSettings("WinBridge", "Manager").value("language", "en-US").toString());
-    Manager window(backend,parser.isSet("screenshot"));window.show();
+    Manager window(backend,parser.isSet("screenshot"),parser.isSet("demo"));window.show();
     if(parser.isSet("screenshot"))QTimer::singleShot(500,&app,[&]{bool ok=window.grab().save(parser.value("screenshot"));app.exit(ok?0:1);});
+    else if(parser.isSet("snapshot"))QTimer::singleShot(1800,&app,[&]{bool ok=window.grab().save(parser.value("snapshot"));app.exit(ok?0:1);});
     exitCode = app.exec();
     } while (exitCode == 42);
     return exitCode;
