@@ -5,6 +5,22 @@
 class ManagerTest : public QObject {
     Q_OBJECT
 private slots:
+    void programIconAndFallback() {
+        QTemporaryDir dir;
+        QString script=dir.filePath("backend.py");
+        QString icon=dir.filePath("app.png");
+        QPixmap pixmap(64,64);pixmap.fill(Qt::green);QVERIFY(pixmap.save(icon));
+        QFile file(script);QVERIFY(file.open(QIODevice::WriteOnly));
+        QJsonArray apps{QJsonObject{{"key","a"},{"name","App"},{"icon",icon}},QJsonObject{{"key","b"},{"name","Blank"},{"icon","/missing/icon.png"}}};
+        QJsonObject data{{"ready",true},{"proton","Test"},{"prefix",dir.path()},{"programs",apps}};
+        file.write("print("+QJsonDocument(QJsonArray{QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))}).toJson(QJsonDocument::Compact).mid(1).chopped(1)+")");file.close();
+        Manager window(script);window.show();
+        auto *list=window.findChild<QListWidget*>("programList");
+        auto *badge=window.findChild<QLabel*>("badge");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(),2,5000);
+        list->setCurrentRow(0);QVERIFY(!badge->pixmap().isNull());
+        list->setCurrentRow(1);QVERIFY(badge->pixmap().isNull());QCOMPARE(badge->text(),QString("B"));
+    }
     void translationFallback() {
         I18n::load("en-US"); QCOMPARE(T("Settings"), QString("Settings"));
         I18n::load("no-NB"); QCOMPARE(T("Settings"), QString::fromUtf8("Innstillinger"));
@@ -28,6 +44,27 @@ private slots:
         QCOMPARE(QSettings("WinBridge","Manager").value("language").toString(),QString("no-NB"));
         QSettings("WinBridge","Manager").clear();
     }
+    void settingsPrefixConfiguresBackend() {
+        QTemporaryDir dir;
+        QString script=dir.filePath("backend.py"), calls=dir.filePath("calls");
+        QFile f(script);QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(("import json,sys\nfrom pathlib import Path\np=Path("+QString("'%1'").arg(calls)+")\nargs=' '.join(sys.argv[1:])\np.write_text((p.read_text() if p.exists() else '') + args + '\\n')\nprint(json.dumps({'selected':'/test/proton','prefix':'/test/custom_prefix','default_prefix':'/test/default','versions':[{'name':'Proton Test','path':'/test/proton'}]}))\n").toUtf8());f.close();
+        SettingsDialog dialog(script);dialog.show();
+        auto *save=dialog.findChild<QPushButton*>("primary");
+        auto *prefix=dialog.findChild<QLineEdit*>("prefix");
+        auto *browse=dialog.findChild<QPushButton*>("browse");
+        QVERIFY(browse!=nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(),5000);
+        QCOMPARE(prefix->text(),QString("/test/custom_prefix"));
+        prefix->setText("/new/moved/prefix");
+        QTimer::singleShot(20,[]{auto *box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); if(box)for(auto *b:box->buttons())if(box->buttonRole(b)==QMessageBox::AcceptRole)b->click();});
+        save->click();
+        QTRY_COMPARE_WITH_TIMEOUT(dialog.result(),int(QDialog::Accepted),5000);
+        QFile callFile(calls); QVERIFY(callFile.open(QIODevice::ReadOnly));
+        QString content = QString::fromUtf8(callFile.readAll());
+        QVERIFY(content.contains("configure"));
+        QVERIFY(content.contains("--prefix /new/moved/prefix"));
+    }
     void searchSelectionAndUninstall() {
         QTemporaryDir dir;
         QString script=dir.filePath("backend.py"), calls=dir.filePath("calls");
@@ -49,6 +86,38 @@ private slots:
         remove->click();
         QTRY_COMPARE_WITH_TIMEOUT(list->count(),0,5000);
         QVERIFY(callFile.open(QIODevice::ReadOnly)); QCOMPARE(callFile.readAll(),QByteArray("list\nuninstall\n"));
+    }
+    void expandableShortcutToggles() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
+        QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
+        QJsonArray scs{QJsonObject{{"id","sc1"},{"name","Game"},{"icon",""},{"desktop",true},{"menu",true}}};
+        QJsonArray apps{QJsonObject{{"key","game1"},{"name","Game App"},{"shortcuts",scs}}};
+        QJsonObject data{{"ready",true},{"prefix",dir.path()},{"programs",apps}};
+        file.write(("import json,sys\nfrom pathlib import Path\np=Path("+QString("'%1'").arg(calls)+")\nargs=' '.join(sys.argv[1:])\np.write_text((p.read_text() if p.exists() else '') + args + '\\n')\nprint("+QJsonDocument(QJsonArray{QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))}).toJson(QJsonDocument::Compact).mid(1).chopped(1)+")\n").toUtf8()); file.close();
+        Manager window(script); window.show();
+        auto *list = window.findChild<QListWidget*>("programList");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(), 1, 5000);
+        auto *toggle = window.findChild<QPushButton*>("shortcutToggle");
+        QVERIFY(toggle != nullptr);
+        auto *panel = window.findChild<QFrame*>("shortcutsPanel");
+        QVERIFY(panel != nullptr);
+        QVERIFY(!panel->isVisible());
+        toggle->click();
+        QVERIFY(panel->isVisible());
+        auto *cbDesktop = panel->findChild<QCheckBox*>("cbDesktop");
+        QVERIFY(cbDesktop != nullptr && cbDesktop->isChecked());
+        cbDesktop->setChecked(false);
+        QTRY_VERIFY_WITH_TIMEOUT([&]() {
+            QFile f(calls);
+            return f.open(QIODevice::ReadOnly) && f.readAll().contains("toggle_shortcut");
+        }(), 5000);
+        QFile callFile(calls);
+        QVERIFY(callFile.open(QIODevice::ReadOnly));
+        QString recorded = QString::fromUtf8(callFile.readAll());
+        QVERIFY(recorded.contains("toggle_shortcut"));
+        QVERIFY(recorded.contains("--id sc1"));
+        QVERIFY(recorded.contains("--desktop 0"));
     }
 };
 QTEST_MAIN(ManagerTest)

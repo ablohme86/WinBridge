@@ -11,6 +11,10 @@ def data_dir():
     return Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'winbridge'
 
 
+def default_prefix():
+    return (data_dir() / 'shared').resolve()
+
+
 def settings_path():
     return Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'winbridge/settings.json'
 
@@ -59,7 +63,7 @@ def shared_prefix(settings=None):
     if len(old_prefixes) == 1:
         return old_prefixes[0].resolve()
     legacy = sorted(p.parent for p in (data_dir() / 'prefixes').glob('*/pfx') if p.is_dir())
-    return legacy[0].resolve() if len(legacy) == 1 else (data_dir() / 'shared').resolve()
+    return legacy[0].resolve() if len(legacy) == 1 else default_prefix()
 
 
 def select_proton(versions, chooser, validate, change=False):

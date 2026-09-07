@@ -7,6 +7,19 @@
 #include "i18n.h"
 #include "settings.h"
 
+class ClickableWidget : public QWidget {
+    QListWidgetItem *item;
+    QListWidget *list;
+public:
+    ClickableWidget(QListWidgetItem *i, QListWidget *l, QWidget *parent = nullptr)
+        : QWidget(parent), item(i), list(l) {}
+protected:
+    void mousePressEvent(QMouseEvent *event) override {
+        list->setCurrentItem(item);
+        QWidget::mousePressEvent(event);
+    }
+};
+
 class Manager : public QWidget {
     QListWidget *list;
     QLineEdit *search;
@@ -19,6 +32,7 @@ class Manager : public QWidget {
     bool busy = false;
     bool screenshot = false;
     QJsonArray programs;
+    QSet<QString> expandedKeys;
 
     QLabel *label(const QString &text, const char *name = nullptr) {
         auto *l = new QLabel(text);
@@ -31,6 +45,18 @@ class Manager : public QWidget {
         b->setCursor(Qt::PointingHandCursor);
         if (name) b->setObjectName(name);
         return b;
+    }
+    void showAppIcon(QLabel *target, const QString &path, const QString &fallback, int size) {
+        target->clear();
+        QPixmap pixmap(path);
+        if (pixmap.isNull()) {
+            target->setText(fallback);
+            return;
+        }
+        const qreal ratio = target->devicePixelRatioF();
+        QPixmap scaled = pixmap.scaled(qRound(size * ratio), qRound(size * ratio), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        scaled.setDevicePixelRatio(ratio);
+        target->setPixmap(scaled);
     }
     void setBusy(bool value) {
         busy = value;
@@ -49,6 +75,20 @@ class Manager : public QWidget {
         if (!key.isEmpty()) args << "--key" << key;
         process->start("/usr/bin/python3", args);
     }
+    void toggleShortcut(const QString &id, const QString &target, bool enabled) {
+        status->setText(T("Updating shortcut …"));
+        auto *p = new QProcess(this);
+        QStringList args{backend, "toggle_shortcut", "--id", id, "--" + target, enabled ? "1" : "0"};
+        connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p](int code, QProcess::ExitStatus) {
+            if (code == 0) {
+                status->setText(T("Shortcut updated."));
+            } else {
+                status->setText(T("Could not update shortcut."));
+            }
+            p->deleteLater();
+        });
+        p->start("/usr/bin/python3", args);
+    }
     void render() {
         QString previous = selectedKey;
         list->clear();
@@ -61,24 +101,112 @@ class Manager : public QWidget {
             auto *item = new QListWidgetItem(list);
             item->setData(Qt::UserRole, key);
             item->setData(Qt::UserRole + 1, name);
-            item->setSizeHint(QSize(0, 82));
-            auto *row = new QWidget;
-            row->setAttribute(Qt::WA_TransparentForMouseEvents);
-            auto *layout = new QHBoxLayout(row);
-            layout->setContentsMargins(18, 10, 20, 10);
+            item->setData(Qt::UserRole + 2, p["icon"].toString());
+
+            auto *container = new QWidget;
+            auto *mainLayout = new QVBoxLayout(container);
+            mainLayout->setContentsMargins(0, 0, 0, 0);
+            mainLayout->setSpacing(0);
+
+            auto *header = new ClickableWidget(item, list);
+            auto *headerLayout = new QHBoxLayout(header);
+            headerLayout->setContentsMargins(18, 10, 20, 10);
             auto *icon = label(name.left(1).toUpper(), "appIcon");
             icon->setAlignment(Qt::AlignCenter);
             icon->setFixedSize(44, 44);
-            layout->addWidget(icon);
+            showAppIcon(icon, p["icon"].toString(), name.left(1).toUpper(), 36);
+            headerLayout->addWidget(icon);
             auto *texts = new QVBoxLayout;
             texts->setSpacing(5);
             auto *title = label(name, "appName");
             title->setToolTip(name);
             texts->addWidget(title);
             texts->addWidget(label(T("Windows app  ·  Shared environment"), "muted"));
-            layout->addLayout(texts, 1);
-            layout->addWidget(label(T("Installed"), "installed"));
-            list->setItemWidget(item, row);
+            headerLayout->addLayout(texts, 1);
+            headerLayout->addWidget(label(T("Installed"), "installed"));
+
+            QJsonArray shortcuts = p["shortcuts"].toArray();
+            QFrame *panel = nullptr;
+            QPushButton *expandBtn = nullptr;
+
+            if (shortcuts.isEmpty()) {
+                expandBtn = button(T("No shortcuts"), "shortcutToggle");
+                expandBtn->setEnabled(false);
+                headerLayout->addWidget(expandBtn);
+            } else {
+                bool isExpanded = expandedKeys.contains(key);
+                expandBtn = button(T("Shortcuts (%1) %2").arg(shortcuts.size()).arg(isExpanded ? "▾" : "▸"), "shortcutToggle");
+                headerLayout->addWidget(expandBtn);
+
+                panel = new QFrame;
+                panel->setObjectName("shortcutsPanel");
+                auto *panelLayout = new QVBoxLayout(panel);
+                panelLayout->setContentsMargins(76, 4, 20, 12);
+                panelLayout->setSpacing(8);
+
+                for (const auto &scVal : shortcuts) {
+                    auto sc = scVal.toObject();
+                    QString scId = sc["id"].toString();
+                    QString scName = sc["name"].toString();
+                    QString scIcon = sc["icon"].toString();
+                    bool onDesktop = sc["desktop"].toBool();
+                    bool inMenu = sc["menu"].toBool();
+
+                    auto *scRow = new QHBoxLayout;
+                    scRow->setSpacing(10);
+
+                    auto *miniIcon = label(scName.left(1).toUpper(), "miniAppIcon");
+                    miniIcon->setAlignment(Qt::AlignCenter);
+                    miniIcon->setFixedSize(22, 22);
+                    showAppIcon(miniIcon, scIcon, scName.left(1).toUpper(), 18);
+                    scRow->addWidget(miniIcon);
+
+                    auto *scTitle = label(scName, "shortcutName");
+                    scTitle->setToolTip(scName);
+                    scRow->addWidget(scTitle, 1);
+
+                    auto *cbDesktop = new QCheckBox(T("Desktop"));
+                    cbDesktop->setObjectName("cbDesktop");
+                    cbDesktop->setChecked(onDesktop);
+                    scRow->addWidget(cbDesktop);
+
+                    auto *cbMenu = new QCheckBox(T("Start menu"));
+                    cbMenu->setObjectName("cbMenu");
+                    cbMenu->setChecked(inMenu);
+                    scRow->addWidget(cbMenu);
+
+                    connect(cbDesktop, &QCheckBox::toggled, this, [this, scId, item](bool checked) {
+                        list->setCurrentItem(item);
+                        toggleShortcut(scId, "desktop", checked);
+                    });
+                    connect(cbMenu, &QCheckBox::toggled, this, [this, scId, item](bool checked) {
+                        list->setCurrentItem(item);
+                        toggleShortcut(scId, "menu", checked);
+                    });
+
+                    panelLayout->addLayout(scRow);
+                }
+
+                panel->setVisible(isExpanded);
+
+                connect(expandBtn, &QPushButton::clicked, this, [this, key, expandBtn, panel, item, container, shortcuts] {
+                    list->setCurrentItem(item);
+                    bool nowExpanded = !panel->isVisible();
+                    panel->setVisible(nowExpanded);
+                    if (nowExpanded) expandedKeys.insert(key);
+                    else expandedKeys.remove(key);
+                    expandBtn->setText(T("Shortcuts (%1) %2").arg(shortcuts.size()).arg(nowExpanded ? "▾" : "▸"));
+                    container->adjustSize();
+                    item->setSizeHint(container->sizeHint());
+                });
+            }
+
+            mainLayout->addWidget(header);
+            if (panel) mainLayout->addWidget(panel);
+
+            container->adjustSize();
+            item->setSizeHint(container->sizeHint());
+            list->setItemWidget(item, container);
             if (key == previous) list->setCurrentItem(item);
             visible++;
         }
@@ -93,7 +221,7 @@ class Manager : public QWidget {
         selectedKey = item ? item->data(Qt::UserRole).toString() : QString();
         QString name = item ? item->data(Qt::UserRole + 1).toString() : T("Select an app");
         detailName->setText(name);
-        badge->setText(item ? name.left(1).toUpper() : "W");
+        showAppIcon(badge, item ? item->data(Qt::UserRole + 2).toString() : QString(), item ? name.left(1).toUpper() : "W", 60);
         detailText->setText(item ? T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.") : T("Your Windows apps, all in one place."));
         removeButton->setEnabled(item && !busy);
     }
@@ -111,6 +239,7 @@ class Manager : public QWidget {
         }
         prefix = result["prefix"].toString();
         folderButton->setEnabled(QDir(prefix + "/pfx/drive_c").exists());
+        folderButton->setToolTip(prefix + "/pfx/drive_c");
         engine->setText(T(result["proton"].toString()));
         engine->setToolTip(result["proton"].toString());
         programs = result["programs"].toArray();
@@ -180,6 +309,17 @@ public:
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
             QProgressBar { border: 0; background: #252b3e; max-height: 3px; }
             QProgressBar::chunk { background: #a48bff; }
+            QFrame#shortcutsPanel { background: #131722; border-top: 1px solid #232838; border-radius: 0 0 11px 11px; padding: 6px 12px 10px 12px; }
+            QLabel#miniAppIcon { background: #2b2b48; color: #b8adff; border-radius: 6px; font-weight: 700; font-size: 11px; }
+            QLabel#shortcutName { font-size: 12px; font-weight: 600; color: #d6dce9; }
+            QCheckBox { color: #8e99b1; spacing: 6px; font-size: 11px; font-weight: 600; }
+            QCheckBox:hover { color: #e9edf6; }
+            QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #38425d; border-radius: 4px; background: #191e2c; }
+            QCheckBox::indicator:hover { border-color: #8970ef; }
+            QCheckBox::indicator:checked { background: #8970ef; border-color: #a48bff; }
+            QPushButton#shortcutToggle { background: #1f2536; border: 1px solid #333d54; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #a4b1cd; }
+            QPushButton#shortcutToggle:hover { background: #2c354c; color: #ffffff; border-color: #6973a0; }
+            QPushButton#shortcutToggle:disabled { color: #58627c; background: #171b26; border-color: #242938; }
         )");
         auto *outer = new QHBoxLayout(this); outer->setContentsMargins(0,0,0,0); outer->setSpacing(0);
         auto *sidebar = new QFrame; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(214);

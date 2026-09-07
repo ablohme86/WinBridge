@@ -4,7 +4,7 @@
 
 WinBridge lets you open Windows `.exe` files from your Linux desktop using an installed Proton version. Choose Proton once, then run installers and portable apps in one shared Windows environment.
 
-**WinBridge Manager** is a native C++17 / Qt 6 desktop app for browsing installed programs, searching your library, and opening each program's uninstall wizard. Its dark interface includes a Settings window for language and Proton selection.
+**WinBridge Manager** is a native C++17 / Qt 6 desktop app for browsing installed programs, searching your library, and opening each program's uninstall wizard. Its dark interface includes a Settings window for language, Proton selection, and the Proton / Wine install directory.
 
 ## Features
 
@@ -13,7 +13,7 @@ WinBridge lets you open Windows `.exe` files from your Linux desktop using an in
 - Reuse one Windows environment across apps, including simultaneous launches.
 - Import shortcuts exported by Proton into the Linux application menu and desktop.
 - Browse and uninstall registered Windows programs in WinBridge Manager.
-- Choose English or Norwegian Bokmål and an installed Proton version in Settings.
+- Choose English or Norwegian Bokmål, an installed Proton version, and the install directory in Settings.
 
 Proton and its required Steam Linux Runtime must already be installed. Compatibility varies between Windows programs. Proton Experimental resolved the Battle.net Agent issue observed during development.
 
@@ -73,11 +73,14 @@ python3 manager.py
 
 The compatibility entry point opens the compiled Qt application. When installed from a distribution package, use `winbridge-manager` directly.
 
+App icons are reused from Proton’s exported Windows shortcuts in both the library and the detail panel. WinBridge selects the largest available PNG; apps without a matching readable icon use an initial as a fallback.
+
 - **Search** filters the installed-program list.
 - **Refresh** reloads the list from Wine.
+- **Expandable shortcuts** let you expand any installed program row to toggle whether individual shortcuts appear in your Linux desktop and/or application menu.
 - **Uninstall app** asks for confirmation, then opens the program's own uninstall wizard.
 - **Open Windows folder** opens the shared `C:` drive in your file manager.
-- **Settings** selects the interface language and Proton version.
+- **Settings** selects the interface language, Proton version, and Proton / Wine install directory.
 
 Close Windows applications before switching Proton versions. A version change keeps the existing Windows environment. Changing the interface language rebuilds the Manager window immediately after saving.
 

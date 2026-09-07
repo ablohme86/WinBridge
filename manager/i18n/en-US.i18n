@@ -61,6 +61,20 @@
     "Select an installed Proton version in Settings first.": "Select an installed Proton version in Settings first.",
     "The app no longer exists, or its ID is ambiguous. Refresh the library.": "The app no longer exists, or its ID is ambiguous. Refresh the library.",
     "The selected Proton version is not installed.": "The selected Proton version is not installed.",
-    "Keep current version": "Keep current version"
+    "Keep current version": "Keep current version",
+    "Proton / Wine install directory": "Proton / Wine install directory",
+    "Location of your shared Windows environment and installed apps.": "Location of your shared Windows environment and installed apps.",
+    "Browse …": "Browse …",
+    "Select Proton / Wine directory": "Select Proton / Wine directory",
+    "Change installation directory?": "Change installation directory?",
+    "Make sure all Windows apps are closed before continuing. If you moved your existing Windows environment, existing apps and data will be loaded from the new location.": "Make sure all Windows apps are closed before continuing. If you moved your existing Windows environment, existing apps and data will be loaded from the new location.",
+    "The environment path must be a directory, not a file.": "The environment path must be a directory, not a file.",
+    "Shortcuts (%1) %2": "Shortcuts (%1) %2",
+    "No shortcuts": "No shortcuts",
+    "Desktop": "Desktop",
+    "Start menu": "Start menu",
+    "Updating shortcut …": "Updating shortcut …",
+    "Shortcut updated.": "Shortcut updated.",
+    "Could not update shortcut.": "Could not update shortcut."
   }
 }

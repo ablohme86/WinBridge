@@ -61,6 +61,20 @@
     "Select an installed Proton version in Settings first.": "Velg en installert Proton-versjon i Innstillinger først.",
     "The app no longer exists, or its ID is ambiguous. Refresh the library.": "Programmet finnes ikke lenger, eller ID-en er tvetydig. Oppdater listen.",
     "The selected Proton version is not installed.": "Den valgte Proton-versjonen er ikke installert.",
-    "Keep current version": "Behold gjeldende versjon"
+    "Keep current version": "Behold gjeldende versjon",
+    "Proton / Wine install directory": "Proton- / Wine-installasjonsmappe",
+    "Location of your shared Windows environment and installed apps.": "Plassering for ditt felles Windows-miljø og installerte programmer.",
+    "Browse …": "Bla gjennom …",
+    "Select Proton / Wine directory": "Velg mappe for Proton / Wine",
+    "Change installation directory?": "Endre installasjonsmappe?",
+    "Make sure all Windows apps are closed before continuing. If you moved your existing Windows environment, existing apps and data will be loaded from the new location.": "Pass på at alle Windows-programmer er avsluttet før du fortsetter. Hvis du har flyttet Windows-miljøet, vil eksisterende programmer og data lastes fra den nye plasseringen.",
+    "The environment path must be a directory, not a file.": "Plasseringen for miljøet må være en mappe, ikke en fil.",
+    "Shortcuts (%1) %2": "Snarveier (%1) %2",
+    "No shortcuts": "Ingen snarveier",
+    "Desktop": "Skrivebord",
+    "Start menu": "Programmeny",
+    "Updating shortcut …": "Oppdaterer snarvei …",
+    "Shortcut updated.": "Snarvei oppdatert.",
+    "Could not update shortcut.": "Kunne ikke oppdatere snarvei."
   }
 }
