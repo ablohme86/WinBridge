@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=WinBridge Manager
+Comment=View and uninstall Windows programs
+Exec=winbridge-manager
+Icon=winbridge
+Terminal=false
+Categories=Utility;

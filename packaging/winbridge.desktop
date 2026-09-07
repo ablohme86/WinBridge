@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=WinBridge
+Comment=Run Windows programs in a shared Proton environment
+Exec=winbridge %f
+Icon=winbridge
+Terminal=false
+Categories=Utility;
+Actions=Configure;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;
+
+[Desktop Action Configure]
+Name=Choose Proton version
+Name[nb]=Velg Proton-versjon
+Exec=winbridge --configure

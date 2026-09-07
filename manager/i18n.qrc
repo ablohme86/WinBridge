@@ -1,0 +1,4 @@
+<RCC><qresource prefix="/i18n">
+<file alias="en-US.i18n">i18n/en-US.i18n</file>
+<file alias="no-NB.i18n">i18n/no-NB.i18n</file>
+</qresource><qresource prefix="/assets"><file alias="winbridge.png">../assets/winbridge.png</file></qresource></RCC>
