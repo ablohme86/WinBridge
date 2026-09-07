@@ -56,6 +56,7 @@ install: build
 	done
 	install -d $(DESTDIR)$(DOCDIR)
 	install -m 644 README.md $(DESTDIR)$(DOCDIR)/README.md
+	install -m 644 INSTALL.md $(DESTDIR)$(DOCDIR)/INSTALL.md
 	@# Overwrite and upgrade legacy installation in ~/.local/share/winbridge if present
 	@if [ -z "$(DESTDIR)" ] && [ -d "$(HOME)/.local/share/winbridge" ]; then \
 		echo "Overwriting existing installed WinBridge files in $(HOME)/.local/share/winbridge..."; \

@@ -74,6 +74,7 @@ case "$machine" in
 esac
 install -Dm644 "$project_dir/assets/winbridge.png" "$payload/usr/share/pixmaps/winbridge.png"
 install -m644 "$project_dir/README.md" "$payload/usr/share/doc/winbridge/README.md"
+install -m644 "$project_dir/INSTALL.md" "$payload/usr/share/doc/winbridge/INSTALL.md"
 if [[ -f $project_dir/LICENSE ]]; then
     install -Dm644 "$project_dir/LICENSE" "$payload/usr/share/licenses/winbridge/LICENSE"
 fi
