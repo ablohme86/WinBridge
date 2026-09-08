@@ -96,7 +96,7 @@ Priority: optional
 Architecture: $deb_arch
 Maintainer: $maintainer
 Depends: libqt6widgets6 (>= $qt_version), libqt6gui6 (>= $qt_version), libqt6core6 (>= $qt_version), libstdc++6, libc6, xdg-utils, xdg-user-dirs, zenity | kdialog
-Recommends: desktop-file-utils
+Recommends: desktop-file-utils, umu-launcher
 Description: Run Windows programs in a shared Proton environment
  Select an installed Proton version once, run Windows executables and
  import installer shortcuts into the Linux desktop and application menu.
@@ -130,6 +130,7 @@ Requires: qt6-qtbase >= $qt_version
 Requires: xdg-utils
 Requires: xdg-user-dirs
 Requires: (zenity or kdialog)
+Recommends: umu-launcher
 AutoReqProv: yes
 
 %description
@@ -186,7 +187,7 @@ pkgdesc='Run Windows programs in a shared Proton environment'
 arch=('$machine')
 license=('$license')
 depends=('qt6-base>=$qt_version' 'gcc-libs' 'glibc' 'xdg-utils' 'xdg-user-dirs' 'zenity')
-optdepends=('kdialog: native KDE dialogs' 'steam: install Proton and Steam Linux Runtime')
+optdepends=('kdialog: native KDE dialogs' 'umu-launcher: download and run Proton without Steam')
 source=('payload.tar.gz')
 noextract=('payload.tar.gz')
 sha256sums=('$checksum')

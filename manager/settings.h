@@ -651,24 +651,38 @@ class SettingsDialog : public QDialog {
     QPushButton *browse;
     QLabel *message;
     QPushButton *save, *cancel;
+    QComboBox *downloadVersion;
+    QPushButton *download;
+    QProgressBar *downloadProgress;
     QProcess *process;
     QString backend, originalLanguage, originalTheme, originalProton, originalPrefix, defaultPrefix;
-    bool saving = false, inFlight = false;
+    bool saving = false, installing = false, inFlight = false, loaded = false;
     QByteArray output;
     void run(const QStringList &args) {
-        inFlight=true; output.clear();save->setEnabled(false);cancel->setEnabled(!saving);
-        language->setEnabled(!saving);theme->setEnabled(!saving);proton->setEnabled(!saving);
-        prefix->setEnabled(!saving);browse->setEnabled(!saving);
+        inFlight=true; output.clear();save->setEnabled(false);cancel->setEnabled(!saving && !installing);
+        language->setEnabled(false);theme->setEnabled(false);proton->setEnabled(false);
+        prefix->setEnabled(false);browse->setEnabled(false);
+        download->setEnabled(false);downloadVersion->setEnabled(false);
         if (backend.endsWith(".py")) {
             process->start("/usr/bin/python3", QStringList{backend} + args);
         } else {
             process->start(backend, args);
         }
     }
-    void fail(const QString &error) {
-        inFlight=false;message->setText(T(error));cancel->setEnabled(true);
+    void showStatus(const QString &text) {
+        inFlight=false;saving=false;installing=false;downloadProgress->hide();message->setText(T(text));cancel->setEnabled(true);
         language->setEnabled(true);theme->setEnabled(true);proton->setEnabled(true);
-        prefix->setEnabled(true);browse->setEnabled(true);save->setEnabled(saving);
+        prefix->setEnabled(true);browse->setEnabled(true);save->setEnabled(loaded);
+        download->setEnabled(loaded);downloadVersion->setEnabled(loaded);
+    }
+    void populateProtons(const QJsonObject &result, const QString &preferred) {
+        proton->clear();
+        proton->addItem(T(originalProton.isEmpty() ? "Not selected" : "Keep current version"),QString());
+        for(const auto &v:result["versions"].toArray()) {
+            auto p=v.toObject();proton->addItem(T(p["name"].toString()),p["path"].toString());
+        }
+        int selected=proton->findData(preferred);
+        proton->setCurrentIndex(selected<0?0:selected);
     }
     void finish(int code, QProcess::ExitStatus state) {
         output+=process->readAllStandardOutput();
@@ -676,41 +690,43 @@ class SettingsDialog : public QDialog {
         auto doc=QJsonDocument::fromJson(output,&parse);
         auto result=doc.object();
         if(code!=0 || state!=QProcess::NormalExit || parse.error!=QJsonParseError::NoError || !doc.isObject() || result.contains("error")) {
-            fail(result.value("error").toString(saving ? "Could not save settings." : "Could not load settings."));return;
+            showStatus(result.value("error").toString(installing ? "Could not download Proton." : (saving ? "Could not save settings." : "Could not load settings.")));return;
         }
         inFlight=false;
+        if(installing) {
+            populateProtons(result,downloadVersion->currentData().toString());
+            showStatus("Proton is ready. Choose a version and save your changes.");
+            return;
+        }
         if(saving) {
             QSettings settings("WinBridge","Manager");
             settings.setValue("language",language->currentData().toString());
             settings.setValue("theme",theme->currentData().toString());
             settings.sync();
-            if(settings.status()!=QSettings::NoError){fail("Could not save settings.");return;}
+            if(settings.status()!=QSettings::NoError){showStatus("Could not save settings.");return;}
             accept();return;
         }
         originalProton=result["selected"].toString();
+        loaded=true;
         originalPrefix=result.value("prefix").toString();
         defaultPrefix=result.value("default_prefix").toString();
         if(originalPrefix.isEmpty() && !defaultPrefix.isEmpty()) originalPrefix = defaultPrefix;
         prefix->setText(originalPrefix);
         if(!defaultPrefix.isEmpty()) prefix->setPlaceholderText(defaultPrefix);
 
-        proton->addItem(T(originalProton.isEmpty() ? "Not selected" : "Keep current version"),QString());
-        for(const auto &v:result["versions"].toArray()) {
-            auto p=v.toObject();proton->addItem(p["name"].toString(),p["path"].toString());
-        }
+        populateProtons(result,originalProton);
         int selected=proton->findData(originalProton);
-        proton->setCurrentIndex(selected<0?0:selected);
-        if(proton->count()==1) message->setText(T("No Proton versions found. Install one using Steam."));
-        else if(selected<0&&!originalProton.isEmpty()) message->setText(T("Saved version is no longer installed. Please choose another version."));
-        else message->setText(T("Close Windows apps before changing Proton versions."));
-        save->setEnabled(true);
+        if(result.contains("umu_available") && !result["umu_available"].toBool())
+            showStatus("Install umu-launcher to download and run Proton without Steam. See INSTALL.md for installation instructions.");
+        else if(selected<0&&!originalProton.isEmpty()) showStatus("Saved version is no longer installed. Please choose another version.");
+        else showStatus("Close Windows apps before changing Proton versions.");
     }
 public:
     bool languageChanged() const {return language->currentData().toString()!=originalLanguage;}
     bool themeChanged() const {return theme->currentData().toString()!=originalTheme;}
     QString selectedTheme() const {return theme->currentData().toString();}
     void reject() override {
-        if(saving && inFlight) return;
+        if((saving || installing) && inFlight) return;
         if(process->state()!=QProcess::NotRunning){process->kill();process->waitForFinished(1000);}
         QDialog::reject();
     }
@@ -719,7 +735,7 @@ public:
         originalLanguage=QSettings("WinBridge","Manager").value("language","en-US").toString();
         originalTheme=QSettings("WinBridge","Manager").value("theme","classic").toString();
         setStyleSheet(retroStyleSheet(originalTheme));
-        auto *layout=new QVBoxLayout(this);layout->setContentsMargins(30,28,30,28);layout->setSpacing(18);
+        auto *layout=new QVBoxLayout(this);layout->setContentsMargins(30,22,30,22);layout->setSpacing(14);
         auto label=[&](const QString &text,const char *id=nullptr){auto *l=new QLabel(T(text));l->setTextFormat(Qt::PlainText);l->setWordWrap(true);if(id)l->setObjectName(id);return l;};
         layout->addWidget(label("Settings","heading"));layout->addWidget(label("Personalize your workspace","muted"));layout->addSpacing(8);
         
@@ -740,6 +756,15 @@ public:
 
         layout->addWidget(label("Proton version"));proton=new QComboBox;proton->setObjectName("proton");layout->addWidget(proton);
         layout->addWidget(label("Used by all apps in your shared Windows environment.","muted"));layout->addSpacing(8);
+        auto *downloadRow=new QHBoxLayout;
+        downloadVersion=new QComboBox;downloadVersion->setObjectName("downloadVersion");
+        downloadVersion->addItem("GE-Proton","GE-Proton");
+        downloadVersion->addItem("UMU-Proton","UMU-Proton");
+        downloadRow->addWidget(downloadVersion,1);
+        download=new QPushButton(T("Download Proton"));download->setObjectName("downloadProton");downloadRow->addWidget(download);
+        layout->addLayout(downloadRow);
+        layout->addWidget(label("Downloads Proton and the required runtime. Steam is not required. Automatic versions check for updates when launched.","muted"));
+        downloadProgress=new QProgressBar;downloadProgress->setObjectName("downloadProgress");downloadProgress->setRange(0,0);downloadProgress->hide();layout->addWidget(downloadProgress);
 
         layout->addWidget(label("Proton / Wine install directory"));
         auto *prefixRow=new QHBoxLayout;prefixRow->setSpacing(8);
@@ -754,7 +779,12 @@ public:
         connect(process,&QProcess::readyReadStandardOutput,this,[this]{output+=process->readAllStandardOutput();});
         connect(process,&QProcess::readyReadStandardError,this,[this]{process->readAllStandardError();});
         connect(process,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,&SettingsDialog::finish);
-        connect(process,&QProcess::errorOccurred,this,[this](QProcess::ProcessError e){if(e==QProcess::FailedToStart)fail("Could not load settings.");});
+        connect(process,&QProcess::errorOccurred,this,[this](QProcess::ProcessError e){if(e==QProcess::FailedToStart)showStatus(installing ? "Could not download Proton." : (saving ? "Could not save settings." : "Could not load settings."));});
+        connect(download,&QPushButton::clicked,this,[this]{
+            saving=false;installing=true;downloadProgress->show();
+            message->setText(T("Downloading and checking Proton and its runtime … This may take several minutes."));
+            run({"install_proton","--proton",downloadVersion->currentData().toString()});
+        });
         connect(cancel,&QPushButton::clicked,this,&SettingsDialog::reject);
         connect(browse,&QPushButton::clicked,this,[this]{
             QString current=prefix->text().trimmed();

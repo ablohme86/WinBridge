@@ -49,7 +49,6 @@
     "Close Windows apps before changing Proton versions.": "Avslutt Windows-programmer før du bytter Proton-versjon.",
     "Save changes": "Lagre endringer",
     "Loading installed Proton versions …": "Henter installerte Proton-versjoner …",
-    "No Proton versions found. Install one using Steam.": "Fant ingen Proton-versjoner. Installer en via Steam.",
     "Could not load settings.": "Kunne ikke hente innstillinger.",
     "Could not save settings.": "Kunne ikke lagre innstillinger.",
     "Change Proton version?": "Bytte Proton-versjon?",
@@ -105,6 +104,20 @@
     "Theme": "Tema",
     "Choose your color scheme.": "Velg fargetema for WinBridge Manager.",
     "Classic Light (Windows 98)": "Klassisk lys (Windows 98)",
-    "Retro Dark (Plus! Mystery)": "Mørk retro (Plus! Mystery)"
+    "Retro Dark (Plus! Mystery)": "Mørk retro (Plus! Mystery)",
+    "GE-Proton (automatic download)": "GE-Proton (automatisk nedlasting)",
+    "UMU-Proton (automatic download)": "UMU-Proton (automatisk nedlasting)",
+    "Download Proton": "Last ned Proton",
+    "Downloads Proton and the required runtime. Steam is not required. Automatic versions check for updates when launched.": "Laster ned Proton og nødvendig kjøremiljø. Steam er ikke nødvendig. Automatiske versjoner ser etter oppdateringer ved oppstart.",
+    "Downloading and checking Proton and its runtime … This may take several minutes.": "Laster ned og kontrollerer Proton og kjøremiljøet … Dette kan ta flere minutter.",
+    "Proton is ready. Choose a version and save your changes.": "Proton er klar. Velg en versjon og lagre endringene.",
+    "Could not download Proton.": "Kunne ikke laste ned Proton.",
+    "Install umu-launcher to download and run Proton without Steam. See INSTALL.md for installation instructions.": "Installer umu-launcher for å laste ned og kjøre Proton uten Steam. Se installasjonsveiledningen i INSTALL.md.",
+    "Choose GE-Proton or UMU-Proton to download.": "Velg GE-Proton eller UMU-Proton for nedlasting.",
+    "Could not create the WinBridge data directory.": "Kunne ikke opprette datamappen til WinBridge.",
+    "Could not create the Proton setup directory.": "Kunne ikke opprette mappen for Proton-oppsett.",
+    "Could not create the Windows environment directory.": "Kunne ikke opprette mappen til Windows-miljøet.",
+    "Proton setup did not complete. Check the WinBridge launch logs.": "Proton-oppsettet ble ikke fullført. Se oppstartsloggene til WinBridge.",
+    "Could not read installed programs. Check the WinBridge launch logs.": "Kunne ikke lese installerte programmer. Se oppstartsloggene til WinBridge."
   }
 }

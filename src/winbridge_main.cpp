@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     app.setApplicationVersion("0.2.0");
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Open Windows executables using an installed Proton, with a desktop chooser.");
+    parser.setApplicationDescription("Open Windows executables using Proton and UMU, without requiring Steam.");
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -48,8 +48,10 @@ int main(int argc, char **argv) {
     QCommandLineOption listOpt("list", "List installed Proton versions");
     parser.addOption(listOpt);
 
-    QCommandLineOption protonOpt("proton", "Use this Proton directory without a chooser", "path");
+    QCommandLineOption protonOpt("proton", "Proton directory, GE-Proton, or UMU-Proton", "path");
     parser.addOption(protonOpt);
+    QCommandLineOption installOpt("install-proton", "Download Proton and its runtime (GE-Proton or UMU-Proton)", "version");
+    parser.addOption(installOpt);
 
     QCommandLineOption prefixOpt("prefix", "Use a specific compatdata directory", "path");
     parser.addOption(prefixOpt);
@@ -61,21 +63,26 @@ int main(int argc, char **argv) {
 
     QStringList roots = steamRoots();
     QStringList libs = steamLibraries(roots);
-    QStringList versions = discoverProtons(roots, libs);
+    QStringList versions = protonChoices(roots, libs);
 
     if (parser.isSet(listOpt)) {
-        for (const QString &v : versions) {
+        for (const QString &v : discoverProtons(roots, libs)) {
             std::cout << QFileInfo(v).fileName().toUtf8().constData() << "\t" << v.toUtf8().constData() << "\n";
         }
         return 0;
     }
 
     try {
+        if (parser.isSet(installOpt)) {
+            installProton(parser.value(installOpt));
+            std::cout << "Proton og runtime er klare. Velg versjon med winbridge --configure.\n";
+            return 0;
+        }
         if (parser.isSet(configureOpt)) {
             selectProton(
                 versions,
                 [&](const QStringList &items) { return chooseProton(items, "WinBridge"); },
-                [&](const QString &p) { runtimeFor(p, libs); },
+                [&](const QString &p) { validateProton(p, libs); },
                 true
             );
             return 0;
@@ -136,15 +143,15 @@ int main(int argc, char **argv) {
             QString p = parser.value(protonOpt);
             if (p.startsWith("~/")) p = QDir::homePath() + p.mid(1);
             QFileInfo prtFi(p);
-            if (!QFile::exists(prtFi.filePath() + "/proton")) {
+            if (!isProtonAvailable(p)) {
                 throw std::runtime_error("Denne mappen inneholder ikke Proton.");
             }
-            chosenProton = prtFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(prtFi.absoluteFilePath()) : prtFi.canonicalFilePath();
+            chosenProton = isProtonDownload(p) ? p : (prtFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(prtFi.absoluteFilePath()) : prtFi.canonicalFilePath());
         } else {
             chosenProton = selectProton(
                 versions,
                 [&](const QStringList &items) { return chooseProton(items, exeFi.fileName()); },
-                [&](const QString &p) { runtimeFor(p, libs); }
+                [&](const QString &p) { validateProton(p, libs); }
             );
         }
 

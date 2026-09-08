@@ -49,7 +49,6 @@
     "Close Windows apps before changing Proton versions.": "Close Windows apps before changing Proton versions.",
     "Save changes": "Save changes",
     "Loading installed Proton versions …": "Loading installed Proton versions …",
-    "No Proton versions found. Install one using Steam.": "No Proton versions found. Install one using Steam.",
     "Could not load settings.": "Could not load settings.",
     "Could not save settings.": "Could not save settings.",
     "Change Proton version?": "Change Proton version?",
@@ -105,6 +104,20 @@
     "Theme": "Theme",
     "Choose your color scheme.": "Choose your retro Windows color scheme.",
     "Classic Light (Windows 98)": "Classic Light (Windows 98)",
-    "Retro Dark (Plus! Mystery)": "Retro Dark (Plus! Mystery)"
+    "Retro Dark (Plus! Mystery)": "Retro Dark (Plus! Mystery)",
+    "GE-Proton (automatic download)": "GE-Proton (automatic download)",
+    "UMU-Proton (automatic download)": "UMU-Proton (automatic download)",
+    "Download Proton": "Download Proton",
+    "Downloads Proton and the required runtime. Steam is not required. Automatic versions check for updates when launched.": "Downloads Proton and the required runtime. Steam is not required. Automatic versions check for updates when launched.",
+    "Downloading and checking Proton and its runtime … This may take several minutes.": "Downloading and checking Proton and its runtime … This may take several minutes.",
+    "Proton is ready. Choose a version and save your changes.": "Proton is ready. Choose a version and save your changes.",
+    "Could not download Proton.": "Could not download Proton.",
+    "Install umu-launcher to download and run Proton without Steam. See INSTALL.md for installation instructions.": "Install umu-launcher to download and run Proton without Steam. See INSTALL.md for installation instructions.",
+    "Choose GE-Proton or UMU-Proton to download.": "Choose GE-Proton or UMU-Proton to download.",
+    "Could not create the WinBridge data directory.": "Could not create the WinBridge data directory.",
+    "Could not create the Proton setup directory.": "Could not create the Proton setup directory.",
+    "Could not create the Windows environment directory.": "Could not create the Windows environment directory.",
+    "Proton setup did not complete. Check the WinBridge launch logs.": "Proton setup did not complete. Check the WinBridge launch logs.",
+    "Could not read installed programs. Check the WinBridge launch logs.": "Could not read installed programs. Check the WinBridge launch logs."
   }
 }

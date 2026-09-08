@@ -13,7 +13,8 @@ For installation, build instructions, and configuration, see [INSTALL.md](INSTAL
 ## What WinBridge does
 
 - **Run Windows programs:** Open `.exe` files from KDE, GNOME, or another desktop environment. Choose Proton once and reuse that choice on later launches.
-- **Find your Proton versions:** Discover Proton in Steam libraries and custom builds such as GE-Proton.
+- **Run without Steam:** Download GE-Proton or UMU-Proton and its runtime from Settings using UMU.
+- **Find your Proton versions:** Discover downloaded builds, Proton in Steam libraries, and custom builds such as GE-Proton.
 - **Share one Windows environment:** Apps use the same Windows registry and installed components, and multiple programs can run at the same time.
 - **Integrate with your desktop:** Import supported shortcuts exported by Proton into the Linux application menu and desktop.
 
@@ -38,6 +39,6 @@ The Manager offers two Windows 9x-inspired themes: **Classic Light (Windows 98)*
 
 ## Compatibility
 
-WinBridge uses an existing Proton installation and its matching Steam Linux Runtime. Compatibility varies between Windows programs.
+WinBridge uses [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) to run Proton with its matching Steam Linux Runtime. Install UMU, then download Proton from Settings or select an existing build. The Steam client is not required. Existing Steam runtime installations remain usable when UMU is unavailable. Compatibility varies between Windows programs.
 
 Both installers and portable applications are supported. Automatic shortcut import depends on the installer exporting supported shortcuts through Proton. Desktop icons also depend on your desktop environment's support; imported application menu entries remain available.

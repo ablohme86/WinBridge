@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     parser.addOption(desktopOpt);
     parser.addOption(menuOpt);
 
-    parser.addPositionalArgument("action", "Action: list, uninstall, settings, configure, toggle_shortcut, running, kill");
+    parser.addPositionalArgument("action", "Action: list, uninstall, settings, configure, install_proton, toggle_shortcut, running, kill");
 
     parser.process(app);
 

@@ -29,6 +29,7 @@
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
 
@@ -109,6 +110,9 @@ QStringList discoverProtons(const QStringList &roots, const QStringList &libs) {
         folders << (root + "/compatibilitytools.d");
     }
     folders << "/usr/share/steam/compatibilitytools.d";
+    QString umuData = qEnvironmentVariable("UMU_FOLDERS_PATH");
+    if (umuData.isEmpty()) umuData = QDir::cleanPath(dataDir() + "/..");
+    folders << umuData + "/Steam/compatibilitytools.d" << umuData + "/umu/compatibilitytools";
 
     QString customEnv = qEnvironmentVariable("WINBRIDGE_SEARCH_PATHS");
     if (customEnv.isEmpty()) {
@@ -150,6 +154,59 @@ QStringList discoverProtons(const QStringList &roots, const QStringList &libs) {
     return list;
 }
 
+bool isProtonDownload(const QString &proton) {
+    return proton == "GE-Proton" || proton == "UMU-Proton";
+}
+
+bool isProtonAvailable(const QString &proton) {
+    return isProtonDownload(proton) || QFileInfo(proton + "/proton").isFile();
+}
+
+QString protonName(const QString &proton) {
+    return isProtonDownload(proton) ? proton + " (automatic download)" : QFileInfo(proton).fileName();
+}
+
+QStringList protonChoices(const QStringList &roots, const QStringList &libs) {
+    return discoverProtons(roots, libs) + QStringList{"GE-Proton", "UMU-Proton"};
+}
+
+QString umuExecutable() {
+    QString executable = QStandardPaths::findExecutable("umu-run");
+    if (executable.isEmpty()) {
+        executable = QStandardPaths::findExecutable("umu-run", {QDir::homePath() + "/.local/bin"});
+    }
+    return executable;
+}
+
+void validateProton(const QString &proton, const QStringList &libs) {
+    if (!isProtonAvailable(proton)) {
+        throw std::runtime_error("The selected Proton version is not installed.");
+    }
+    if (!umuExecutable().isEmpty()) return;
+    if (isProtonDownload(proton)) {
+        throw std::runtime_error("Install umu-launcher to download and run Proton without Steam. See INSTALL.md for installation instructions.");
+    }
+    runtimeFor(proton, libs);
+}
+
+void installProton(const QString &proton) {
+    if (!isProtonDownload(proton)) {
+        throw std::runtime_error("Choose GE-Proton or UMU-Proton to download.");
+    }
+    validateProton(proton, {});
+    if (!QDir().mkpath(dataDir())) throw std::runtime_error("Could not create the WinBridge data directory.");
+    // Prepare downloads in a disposable environment, leaving the shared prefix intact.
+    QTemporaryDir prefix(dataDir() + "/setup-XXXXXX");
+    if (!prefix.isValid()) throw std::runtime_error("Could not create the Proton setup directory.");
+    launch("cmd.exe", proton, {}, {}, {"/c", "echo ready>C:\\winbridge-setup.txt"}, prefix.path(), false, "waitforexitandrun");
+    // Some launcher versions return zero after a Python error. Require proof
+    // that Windows actually ran before reporting a successful setup.
+    QFile marker(prefix.path() + "/pfx/drive_c/winbridge-setup.txt");
+    if (!marker.open(QIODevice::ReadOnly) || marker.readAll().trimmed() != "ready") {
+        throw std::runtime_error("Proton setup did not complete. Check the WinBridge launch logs.");
+    }
+}
+
 QString runtimeFor(const QString &protonDir, const QStringList &libs) {
     auto manifest = parseKeyValuePairs(protonDir + "/toolmanifest.vdf");
     QString appid = manifest.value("require_tool_appid");
@@ -166,7 +223,7 @@ QString runtimeFor(const QString &protonDir, const QStringList &libs) {
         }
     }
 
-    throw std::runtime_error(QString("%1 trenger Steam Linux Runtime (Steam App ID %2). Installer den fra Verktøy i Steam og prøv igjen.")
+    throw std::runtime_error(QString("%1 trenger Steam Linux Runtime (Steam App ID %2). Installer umu-launcher for å kjøre uten Steam, eller installer runtime fra Verktøy i Steam.")
         .arg(QFileInfo(protonDir).fileName(), appid).toStdString());
 }
 
@@ -194,7 +251,7 @@ void showError(const QString &message) {
 
 QString chooseProton(const QStringList &versions, const QString &exeName) {
     QString tool = dialogTool();
-    QString prompt = "Hvilken Proton-versjon vil du bruke i WinBridge?\nValget huskes for alle programmer.";
+    QString prompt = "Hvilken Proton-versjon vil du bruke i WinBridge?\nValget huskes for alle programmer. Automatiske valg laster ned ved behov; dette kan ta flere minutter.";
     if (tool.isEmpty()) {
         if (versions.isEmpty()) return QString();
         return versions.first();
@@ -204,7 +261,7 @@ QString chooseProton(const QStringList &versions, const QString &exeName) {
     if (tool == "kdialog") {
         QStringList args = {"--title", "WinBridge", "--ok-label", "Open", "--cancel-label", "Avbryt", "--menu", prompt};
         for (int i = 0; i < versions.size(); ++i) {
-            args << QString::number(i) << QString("%1 — %2").arg(QFileInfo(versions[i]).fileName(), versions[i]);
+            args << QString::number(i) << QString("%1 — %2").arg(protonName(versions[i]), versions[i]);
         }
         proc.start("kdialog", args);
     } else {
@@ -215,7 +272,7 @@ QString chooseProton(const QStringList &versions, const QString &exeName) {
             "--hide-column=1", "--print-column=1"
         };
         for (int i = 0; i < versions.size(); ++i) {
-            args << QString::number(i) << QFileInfo(versions[i]).fileName() << versions[i];
+            args << QString::number(i) << protonName(versions[i]) << versions[i];
         }
         proc.start("zenity", args);
     }
@@ -244,7 +301,9 @@ int launch(
     QString *capturedOutput,
     const QString &launcherArg
 ) {
-    QString runtime = runtimeFor(proton, libs);
+    validateProton(proton, libs);
+    QString umu = umuExecutable();
+    QString runtime = umu.isEmpty() ? runtimeFor(proton, libs) : QString();
     QString data = dataDir();
 
     QFileInfo exeFi(exe);
@@ -253,7 +312,11 @@ int launch(
 
     QString compat = prefixArg.isEmpty() ? sharedPrefix() : prefixArg;
     if (compat.startsWith("~/")) compat = QDir::homePath() + compat.mid(1);
-    QDir(compat).mkpath(".");
+    // UMU accepts a compatdata root when pfx already exists. Keep the layout
+    // used by shortcuts, registry inspection, and existing WinBridge installs.
+    if (!QDir().mkpath(compat + "/pfx")) {
+        throw std::runtime_error("Could not create the Windows environment directory.");
+    }
     QFileInfo compatFi(compat);
     compat = compatFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(compatFi.absoluteFilePath()) : compatFi.canonicalFilePath();
 
@@ -289,7 +352,21 @@ int launch(
 
     QString program;
     QStringList commandArgs;
-    if (!runtime.isEmpty()) {
+    if (!umu.isEmpty()) {
+        program = umu;
+        env.insert("WINEPREFIX", compat);
+        env.insert("PROTONPATH", proton);
+        env.insert("GAMEID", "umu-default");
+        env.insert("STORE", "none");
+        env.insert("PROTON_VERB", verb);
+        if (!capture && verb == "run" && !env.contains("UMU_ZENITY") && !QStandardPaths::findExecutable("zenity").isEmpty()) {
+            env.insert("UMU_ZENITY", "1");
+        }
+        // These overrides would bypass the runtime or Wine entirely.
+        env.remove("UMU_NO_RUNTIME");
+        env.remove("UMU_NO_PROTON");
+        commandArgs = targetArgs + extra;
+    } else if (!runtime.isEmpty()) {
         program = runtime;
         commandArgs << "--verb=run" << "--" << (proton + "/proton") << verb;
         commandArgs.append(targetArgs);
@@ -314,7 +391,7 @@ int launch(
         throw std::runtime_error(QString("Kunne ikke opprette loggfil: %1").arg(logfilePath).toStdString());
     }
 
-    QString header = QString("Proton: %1\nExecutable: %2\nPrefix: %3\n").arg(proton, exe, compat);
+    QString header = QString("Proton: %1\nExecutable: %2\nPrefix: %3\nLauncher: %4\n").arg(proton, exe, compat, program);
     logFile.write(header.toUtf8());
     logFile.flush();
 

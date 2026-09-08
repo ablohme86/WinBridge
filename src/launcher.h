@@ -28,6 +28,13 @@ QMap<QString, QString> parseKeyValuePairs(const QString &filePath);
 QStringList steamRoots();
 QStringList steamLibraries(const QStringList &roots);
 QStringList discoverProtons(const QStringList &roots, const QStringList &libs);
+QStringList protonChoices(const QStringList &roots, const QStringList &libs);
+bool isProtonDownload(const QString &proton);
+bool isProtonAvailable(const QString &proton);
+QString protonName(const QString &proton);
+QString umuExecutable();
+void validateProton(const QString &proton, const QStringList &libs);
+void installProton(const QString &proton);
 QString runtimeFor(const QString &protonDir, const QStringList &libs);
 
 QString dialogTool();

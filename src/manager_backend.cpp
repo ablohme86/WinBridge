@@ -356,10 +356,15 @@ QJsonObject operate(
         settings = QJsonObject();
     }
 
+    if (action == "install_proton") {
+        installProton(selectedProton);
+        return operate("settings");
+    }
+
     if (action == "settings" || action == "configure") {
         QStringList roots = steamRoots();
         QStringList libs = steamLibraries(roots);
-        QStringList versions = discoverProtons(roots, libs);
+        QStringList versions = protonChoices(roots, libs);
 
         if (action == "configure") {
             SettingsLock lock;
@@ -371,11 +376,11 @@ QJsonObject operate(
 
             if (!selectedProton.isEmpty()) {
                 QFileInfo protonFi(selectedProton);
-                QString selected = protonFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(protonFi.absoluteFilePath()) : protonFi.canonicalFilePath();
-                if (!versions.contains(selected)) {
+                QString selected = isProtonDownload(selectedProton) ? selectedProton : (protonFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(protonFi.absoluteFilePath()) : protonFi.canonicalFilePath());
+                if (!isProtonAvailable(selected)) {
                     throw std::runtime_error("The selected Proton version is not installed.");
                 }
-                runtimeFor(selected, libs);
+                validateProton(selected, libs);
                 settings["proton"] = selected;
             }
 
@@ -403,10 +408,14 @@ QJsonObject operate(
             saveSettings(settings);
         }
 
+        QString savedProton = settings.value("proton").toString();
+        if (!savedProton.isEmpty() && isProtonAvailable(savedProton) && !versions.contains(savedProton)) {
+            versions.append(savedProton);
+        }
         QJsonArray versionArr;
         for (const QString &v : versions) {
             QJsonObject vObj;
-            vObj["name"] = QFileInfo(v).fileName();
+            vObj["name"] = protonName(v);
             vObj["path"] = v;
             versionArr.append(vObj);
         }
@@ -416,6 +425,7 @@ QJsonObject operate(
         ret["versions"] = versionArr;
         ret["prefix"] = sharedPrefix(settings);
         ret["default_prefix"] = defaultPrefix();
+        ret["umu_available"] = !umuExecutable().isEmpty();
         return ret;
     }
 
@@ -447,12 +457,12 @@ QJsonObject operate(
     }
 
     QString protonPath = settings.value("proton").toString();
-    QString protonName = protonPath.isEmpty() ? "Not selected" : QFileInfo(protonPath).fileName();
+    QString selectedName = protonPath.isEmpty() ? "Not selected" : protonName(protonPath);
     QString uninstallerExe = prefix + "/pfx/drive_c/windows/system32/uninstaller.exe";
 
     QJsonObject result;
     result["prefix"] = prefix;
-    result["proton"] = protonName;
+    result["proton"] = selectedName;
     result["programs"] = QJsonArray();
     result["ready"] = false;
 
@@ -463,7 +473,7 @@ QJsonObject operate(
         return result;
     }
 
-    if (protonPath.isEmpty() || !QFile::exists(protonPath + "/proton")) {
+    if (protonPath.isEmpty() || !isProtonAvailable(protonPath)) {
         throw std::runtime_error("Select an installed Proton version in Settings first.");
     }
 
@@ -472,7 +482,10 @@ QJsonObject operate(
 
     auto queryPrograms = [&]() -> QList<QPair<QString, QString>> {
         QString captured;
-        launch(uninstallerExe, protonPath, roots, libs, {"--list"}, prefix, true, "runinprefix", &captured);
+        int code = launch(uninstallerExe, protonPath, roots, libs, {"--list"}, prefix, true, "runinprefix", &captured);
+        if (code != 0) {
+            throw std::runtime_error("Could not read installed programs. Check the WinBridge launch logs.");
+        }
         return parsePrograms(captured);
     };
 

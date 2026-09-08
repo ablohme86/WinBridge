@@ -10,12 +10,13 @@ Requirements:
 - Qt 6 Test development files for the unit test suite
 - `xdg-utils` and `xdg-user-dirs`
 - KDialog or Zenity for the `.exe` launcher's first-run dialog
-- An installed Proton version and its matching Steam Linux Runtime
+- `umu-launcher` to download and run Proton without Steam (see below)
+- Working graphics drivers, including the 32-bit libraries required by your Proton build
 
 On Arch Linux, the build dependencies are available through:
 
 ```sh
-sudo pacman -S --needed base-devel cmake qt6-base xdg-utils xdg-user-dirs zenity
+sudo pacman -S --needed base-devel cmake qt6-base xdg-utils xdg-user-dirs zenity umu-launcher
 ```
 
 On Debian, update the package index and install the build dependencies with:
@@ -40,6 +41,31 @@ make install-user
 
 This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run `sudo make install` to install system-wide to `/usr/local`.
 
+## Set up Proton without Steam
+
+Install [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher#packaging) using your distribution's package or the upstream installation instructions. WinBridge finds `umu-run` on `PATH` or in `~/.local/bin`. Building WinBridge does not install UMU. On Debian and Fedora, check upstream's distribution instructions if your repositories do not provide `umu-launcher`.
+
+1. Open **WinBridge Manager → Settings**.
+2. Choose **GE-Proton** or **UMU-Proton** beside **Download Proton**, then click the button.
+3. Wait for Proton and its matching Steam Linux Runtime to download and be checked. This requires internet access and may take several minutes. Setup uses a temporary Windows environment and leaves your shared environment untouched.
+4. Select a Proton version and click **Save changes**.
+
+GE-Proton includes additional compatibility patches. UMU-Proton is based on Valve's Proton with UMU compatibility changes. Neither requires the Steam client. UMU handles download verification, extraction, and runtime updates.
+
+The **automatic download** choices check for Proton updates at launch. Select a specific installed version in the same list to keep using that build. Close Windows apps before changing versions. A failed download leaves your settings unchanged; retry with **Download Proton**. If UMU can use an already installed build after a network failure, setup can succeed with that build.
+
+You can also prepare downloads from a terminal:
+
+```sh
+winbridge --install-proton GE-Proton
+winbridge --install-proton UMU-Proton
+winbridge --configure
+```
+
+The download command does not change the saved Proton selection. On first launch, choosing an automatic version also downloads the required files as needed.
+
+Existing Proton installations remain discoverable, including Steam libraries. With UMU installed, WinBridge starts them through UMU. Without UMU, existing builds can still use their installed Steam runtime; automatic downloads require UMU.
+
 ## Build with CMake
 
 The executables can also be built directly with CMake:
@@ -59,7 +85,7 @@ QT_QPA_PLATFORM=offscreen ./build/manager/winbridge-manager \
 
 ## Run Windows programs
 
-Double-click an `.exe`, choose your installed Proton version on the first launch, and click **Open**. Subsequent launches reuse that choice.
+Double-click an `.exe`, choose an installed Proton version or an automatic download on the first launch, and click **Open**. Subsequent launches reuse that choice.
 
 Installers and standalone executables are both supported. Keep a portable application's supporting DLLs and data files alongside it as required by that application.
 
@@ -73,6 +99,7 @@ Arguments following the executable are forwarded to the Windows application. Adv
 
 ```sh
 winbridge --proton '/path/to/Proton' '/path/to/application.exe'
+winbridge --proton GE-Proton '/path/to/application.exe'
 winbridge --prefix '/path/to/compatdata' '/path/to/application.exe'
 ```
 
@@ -87,8 +114,12 @@ winbridge --prefix '/path/to/compatdata' '/path/to/application.exe'
 | `~/.config/winbridge/settings.json` | Selected Proton and environment path |
 | `~/.config/WinBridge/Manager.conf` | Manager interface preferences |
 | `~/.local/state/winbridge/logs` | Launch and management logs |
+| `~/.local/share/Steam/compatibilitytools.d` | Versioned Proton downloads managed by UMU; no Steam client needed |
+| `~/.local/share/umu` | UMU runtime and managed compatibility tools |
 
 The standard XDG data, config, and state directory overrides are supported. Apps in the shared environment use the same Windows registry and installed components.
+
+WinBridge passes the compatibility data directory to UMU as `WINEPREFIX` and ensures its `pfx` subdirectory exists, preserving the existing `shared/pfx/drive_c` layout. UMU's `UMU_FOLDERS_PATH` override is also respected when discovering downloaded builds.
 
 Upgrades from ProtonRun preserve the old environment and settings in place. If a single older environment exists, WinBridge can adopt it. Multiple old environments are not merged automatically.
 

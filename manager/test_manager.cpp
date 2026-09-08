@@ -17,12 +17,54 @@
 */
 
 #define WINBRIDGE_MANAGER_TEST
-#include "main.cpp"
+#include <QtWidgets>
 #include <QtTest>
+#include "main.cpp"
 
 class ManagerTest : public QObject {
     Q_OBJECT
 private slots:
+    void protonDownloadPreservesEditsAndRecoversFromFailure() {
+        QTemporaryDir dir;
+        QString script=dir.filePath("backend.py");
+        QFile f(script);QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"PY(import json,sys,time
+from pathlib import Path
+data={'selected':'','prefix':'/original','umu_available':True,'versions':[{'name':'GE-Proton (automatic download)','path':'GE-Proton'},{'name':'UMU-Proton (automatic download)','path':'UMU-Proton'}]}
+if sys.argv[1]=='install_proton':
+    time.sleep(0.1)
+    assert sys.argv[2:] == ['--proton','GE-Proton']
+    marker=Path(__file__).with_suffix('.attempt')
+    if not marker.exists():
+        marker.touch()
+        print(json.dumps({'error':'Download failed. Log: /tmp/download.log'}))
+        sys.exit(1)
+    data['versions'].append({'name':'GE-Proton10-1','path':'/downloaded/GE-Proton10-1'})
+print(json.dumps(data))
+)PY");f.close();
+        SettingsDialog dialog(script);dialog.show();
+        auto *download=dialog.findChild<QPushButton*>("downloadProton");
+        auto *save=dialog.findChild<QPushButton*>("primary");
+        auto *prefix=dialog.findChild<QLineEdit*>("prefix");
+        auto *proton=dialog.findChild<QComboBox*>("proton");
+        auto *progress=dialog.findChild<QProgressBar*>("downloadProgress");
+        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
+        prefix->setText("/unsaved prefix");
+        download->click();
+        QVERIFY(progress->isVisible());QVERIFY(!save->isEnabled());QVERIFY(!download->isEnabled());
+        dialog.reject();QVERIFY(dialog.isVisible());
+        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
+        QVERIFY(!progress->isVisible());QVERIFY(save->isEnabled());
+        QCOMPARE(prefix->text(),QString("/unsaved prefix"));
+        QCOMPARE(proton->count(),3);
+        download->click();
+        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
+        QCOMPARE(prefix->text(),QString("/unsaved prefix"));
+        QCOMPARE(proton->count(),4);
+        QCOMPARE(proton->currentData().toString(),QString("GE-Proton"));
+        QVERIFY(!progress->isVisible());QVERIFY(dialog.isVisible());
+        dialog.reject();QVERIFY(!dialog.isVisible());
+    }
     void programIconAndFallback() {
         QTemporaryDir dir;
         QString script=dir.filePath("backend.py");
@@ -270,4 +312,3 @@ private slots:
 };
 QTEST_MAIN(ManagerTest)
 #include "test_manager.moc"
-

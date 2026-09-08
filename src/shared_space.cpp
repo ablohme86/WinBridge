@@ -17,6 +17,7 @@
 */
 
 #include "shared_space.h"
+#include "launcher.h"
 
 #include <QDir>
 #include <QFile>
@@ -197,12 +198,12 @@ QString selectProton(
     }
 
     QString saved = settings.value("proton").toString();
-    if (!saved.isEmpty() && QFile::exists(saved + "/proton") && !change) {
+    if (!saved.isEmpty() && isProtonAvailable(saved) && !change) {
         return saved;
     }
 
     if (versions.isEmpty()) {
-        throw std::runtime_error("Fant ingen Proton-versjoner. Installer Proton fra Verktøy i Steam.");
+        throw std::runtime_error("Fant ingen Proton-versjoner. Last ned Proton i innstillingene til WinBridge Manager.");
     }
 
     QString selected = chooser(versions);
