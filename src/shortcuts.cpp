@@ -337,7 +337,7 @@ QMap<QString, ProgramRegistryMeta> getProgramRegistryMeta(const QString &prefix)
             auto iconM = iconRe.match(body);
 
             QString disp = nameM.hasMatch() ? decodeRegString(nameM.captured(1)) : "";
-            QString loc = locM.hasMatch() ? locM.captured(1).replace(R"(\\)", "/").trimmed() : "";
+            QString loc = locM.hasMatch() ? decodeRegString(locM.captured(1)).replace(R"(\\)", "/").trimmed() : "";
             if (loc.startsWith('/')) loc = loc.mid(1);
             if (loc.startsWith("C:", Qt::CaseInsensitive)) loc = loc.mid(2).trimmed();
             if (loc.startsWith('/')) loc = loc.mid(1);

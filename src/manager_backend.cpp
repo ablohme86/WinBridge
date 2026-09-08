@@ -340,6 +340,35 @@ QMap<QString, QString> programIcons(const QString &prefix) {
     return result;
 }
 
+QString programInstallDirectory(const QString &prefix, const QString &location) {
+    QString path = location.trimmed();
+    path.replace('\\', '/');
+    if (path.startsWith('"') && path.endsWith('"')) path = path.mid(1, path.size() - 2);
+    QString root = prefix + "/pfx/drive_c";
+    static const QRegularExpression drive("^([A-Za-z]):/");
+    auto match = drive.match(path);
+    if (match.hasMatch()) {
+        QString letter = match.captured(1).toLower();
+        if (letter != "c") root = prefix + "/pfx/dosdevices/" + letter + ":";
+        path = path.mid(3);
+    }
+    if (path.isEmpty() || path.startsWith('/') || path.contains(':')) return {};
+    QDir directory(root);
+    if (!directory.exists()) return {};
+    // Registry paths use Windows casing, which may differ from the host files.
+    for (const QString &part : path.split('/', Qt::SkipEmptyParts)) {
+        if (part == "..") return {};
+        if (part == ".") continue;
+        if (directory.cd(part)) continue;
+        QStringList matches;
+        for (const QString &entry : directory.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden)) {
+            if (entry.compare(part, Qt::CaseInsensitive) == 0) matches << entry;
+        }
+        if (matches.size() != 1 || !directory.cd(matches.first())) return {};
+    }
+    return directory.canonicalPath();
+}
+
 QJsonObject operate(
     const QString &action,
     const QString &key,
@@ -534,6 +563,7 @@ QJsonObject operate(
             displayName = meta[p.first.toLower()].name;
         }
         pObj["name"] = displayName;
+        pObj["install_path"] = programInstallDirectory(prefix, meta.value(p.first.toLower()).loc);
         QString icon = icons.value(displayName.toLower(), "");
         if (icon.isEmpty()) icon = icons.value(p.second.toLower(), "");
         pObj["icon"] = icon;

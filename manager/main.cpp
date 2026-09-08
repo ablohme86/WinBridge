@@ -26,19 +26,6 @@
 #include "settings.h"
 #include "about.h"
 
-class ClickableWidget : public QWidget {
-    QListWidgetItem *item;
-    QListWidget *list;
-public:
-    ClickableWidget(QListWidgetItem *i, QListWidget *l, QWidget *parent = nullptr)
-        : QWidget(parent), item(i), list(l) {}
-protected:
-    void mousePressEvent(QMouseEvent *event) override {
-        list->setCurrentItem(item);
-        QWidget::mousePressEvent(event);
-    }
-};
-
 class Manager : public QWidget {
     QListWidget *list;
     QLineEdit *search;
@@ -55,6 +42,9 @@ class Manager : public QWidget {
     bool screenshot = false;
     QJsonArray programs;
     QSet<QString> expandedKeys;
+    QPushButton *filesButton, *shortcutButton;
+    QFrame *shortcutsPanel;
+    QScrollArea *shortcutScroll;
 
     QLabel *label(const QString &text, const char *name = nullptr) {
         auto *l = new QLabel(text);
@@ -89,6 +79,62 @@ class Manager : public QWidget {
         scaled.setDevicePixelRatio(ratio);
         target->setPixmap(scaled);
     }
+    QJsonObject selectedProgram() const {
+        for (const auto &value : programs) {
+            auto program = value.toObject();
+            if (program["key"].toString() == selectedKey) return program;
+        }
+        return {};
+    }
+    void showFiles(const QString &installPath) {
+        if (installPath.isEmpty() || !QDir(installPath).exists()) {
+            status->setText(T("Installation folder is unavailable."));
+        } else if (!QDesktopServices::openUrl(QUrl::fromLocalFile(installPath))) {
+            status->setText(T("Could not open the installation folder."));
+        }
+    }
+    void showProgramMenu(const QPoint &position) {
+        auto *item = list->itemAt(position);
+        if (!item) return;
+        list->setCurrentItem(item);
+        auto program = selectedProgram();
+        QString key = selectedKey, name = program["name"].toString();
+        QString installPath = program["install_path"].toString();
+        auto *menu = new QMenu(list);
+        menu->setObjectName("programContextMenu");
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        auto *uninstall = menu->addAction(T("Uninstall"));
+        uninstall->setObjectName("contextUninstall");uninstall->setEnabled(!busy);
+        connect(uninstall, &QAction::triggered, this, [this, key, name] { confirmAndUninstall(key, name); });
+        auto *files = menu->addAction(T("Show files"));
+        files->setObjectName("contextShowFiles");
+        files->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
+        connect(files, &QAction::triggered, this, [this, installPath] { if (!busy) showFiles(installPath); });
+        menu->popup(list->viewport()->mapToGlobal(position));
+    }
+    void updateDetailShortcuts(const QJsonObject &program) {
+        auto *layout = shortcutsPanel->layout();
+        while (auto *item = layout->takeAt(0)) { delete item->widget();delete item; }
+        auto shortcuts = program["shortcuts"].toArray();
+        bool expanded = expandedKeys.contains(selectedKey) && !shortcuts.isEmpty();
+        shortcutButton->setText(shortcuts.isEmpty() ? T("No shortcuts") : T("Shortcuts (%1) %2").arg(shortcuts.size()).arg(expanded ? "▾" : "▸"));
+        shortcutButton->setEnabled(!busy && !shortcuts.isEmpty());
+        shortcutsPanel->setEnabled(!busy);
+        shortcutScroll->setVisible(expanded);
+        for (const auto &value : shortcuts) {
+            auto shortcut = value.toObject();
+            QString id = shortcut["id"].toString();
+            auto *row = new QWidget;
+            auto *rowLayout = new QVBoxLayout(row);rowLayout->setContentsMargins(0,0,0,0);rowLayout->setSpacing(6);
+            auto *name = label(shortcut["name"].toString(), "shortcutName");name->setWordWrap(true);rowLayout->addWidget(name);
+            auto *checks = new QHBoxLayout;
+            auto *desktop = new QCheckBox(T("Desktop"));desktop->setObjectName("cbDesktop");desktop->setChecked(shortcut["desktop"].toBool());checks->addWidget(desktop);
+            auto *menu = new QCheckBox(T("Start menu"));menu->setObjectName("cbMenu");menu->setChecked(shortcut["menu"].toBool());checks->addWidget(menu);
+            rowLayout->addLayout(checks);layout->addWidget(row);
+            connect(desktop, &QCheckBox::toggled, this, [this, id](bool checked) { toggleShortcut(id, "desktop", checked); });
+            connect(menu, &QCheckBox::toggled, this, [this, id](bool checked) { toggleShortcut(id, "menu", checked); });
+        }
+    }
     void updateKillButtonState() {
         bool isRunning = false;
         for (const auto &val : programs) {
@@ -110,11 +156,11 @@ class Manager : public QWidget {
         if (aboutButton) aboutButton->setEnabled(!value);
         removeButton->setEnabled(!value && !selectedKey.isEmpty());
         updateKillButtonState();
-        if (list) {
-            for (auto *btn : list->findChildren<QPushButton*>("itemUninstall")) {
-                btn->setEnabled(!value);
-            }
-        }
+        auto selected = selectedProgram();
+        QString installPath = selected["install_path"].toString();
+        filesButton->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
+        shortcutButton->setEnabled(!busy && !selected["shortcuts"].toArray().isEmpty());
+        shortcutsPanel->setEnabled(!busy);
     }
     void executeBackend(QProcess *proc, const QStringList &args) {
         if (backend.endsWith(".py")) {
@@ -196,8 +242,17 @@ class Manager : public QWidget {
         status->setText(T("Updating shortcut …"));
         auto *p = new QProcess(this);
         QStringList args{"toggle_shortcut", "--id", id, "--" + target, enabled ? "1" : "0"};
-        connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p](int code, QProcess::ExitStatus) {
+        connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p, id, target, enabled](int code, QProcess::ExitStatus) {
             if (code == 0) {
+                for (int i = 0; i < programs.size(); ++i) {
+                    auto program = programs[i].toObject();
+                    auto shortcuts = program["shortcuts"].toArray();
+                    for (int j = 0; j < shortcuts.size(); ++j) {
+                        auto shortcut = shortcuts[j].toObject();
+                        if (shortcut["id"].toString() == id) { shortcut[target] = enabled;shortcuts[j] = shortcut; }
+                    }
+                    program["shortcuts"] = shortcuts;programs[i] = program;
+                }
                 status->setText(T("Shortcut updated."));
             } else {
                 status->setText(T("Could not update shortcut."));
@@ -238,7 +293,7 @@ class Manager : public QWidget {
             mainLayout->setContentsMargins(0, 0, 0, 0);
             mainLayout->setSpacing(0);
 
-            auto *header = new ClickableWidget(item, list);
+            auto *header = new QWidget;
             header->setObjectName("itemCard");
             auto *headerLayout = new QHBoxLayout(header);
             headerLayout->setContentsMargins(18, 12, 18, 12);
@@ -261,105 +316,13 @@ class Manager : public QWidget {
             if (isRunning) {
                 auto *runBadge = label(T("●  Running"), "running");
                 headerLayout->addWidget(runBadge);
-                auto *killBtn = button(T("Kill"), "itemKill");
-                killBtn->setObjectName("itemKill");
-                killBtn->setToolTip(T("Forcibly terminate running app"));
-                headerLayout->addWidget(killBtn);
-                connect(killBtn, &QPushButton::clicked, this, [this, key, name, item] {
-                    list->setCurrentItem(item);
-                    confirmAndKill(key, name);
-                });
+
             } else {
                 headerLayout->addWidget(label(T("Installed"), "installed"));
             }
 
-            QJsonArray shortcuts = p["shortcuts"].toArray();
-            QFrame *panel = nullptr;
-            QPushButton *expandBtn = nullptr;
-
-            if (shortcuts.isEmpty()) {
-                expandBtn = button(T("No shortcuts"), "shortcutToggle");
-                expandBtn->setEnabled(false);
-                headerLayout->addWidget(expandBtn);
-            } else {
-                bool isExpanded = expandedKeys.contains(key);
-                expandBtn = button(T("Shortcuts (%1) %2").arg(shortcuts.size()).arg(isExpanded ? "▾" : "▸"), "shortcutToggle");
-                headerLayout->addWidget(expandBtn);
-
-                panel = new QFrame;
-                panel->setObjectName("shortcutsPanel");
-                auto *panelLayout = new QVBoxLayout(panel);
-                panelLayout->setContentsMargins(76, 6, 20, 14);
-                panelLayout->setSpacing(8);
-
-                for (const auto &scVal : shortcuts) {
-                    auto sc = scVal.toObject();
-                    QString scId = sc["id"].toString();
-                    QString scName = sc["name"].toString();
-                    QString scIcon = sc["icon"].toString();
-                    bool onDesktop = sc["desktop"].toBool();
-                    bool inMenu = sc["menu"].toBool();
-
-                    auto *scRow = new QHBoxLayout;
-                    scRow->setSpacing(10);
-
-                    auto *miniIcon = label(scName.left(1).toUpper(), "miniAppIcon");
-                    miniIcon->setAlignment(Qt::AlignCenter);
-                    miniIcon->setFixedSize(24, 24);
-                    showAppIcon(miniIcon, scIcon, scName.left(1).toUpper(), 18);
-                    scRow->addWidget(miniIcon);
-
-                    auto *scTitle = label(scName, "shortcutName");
-                    scTitle->setToolTip(scName);
-                    scRow->addWidget(scTitle, 1);
-
-                    auto *cbDesktop = new QCheckBox(T("Desktop"));
-                    cbDesktop->setObjectName("cbDesktop");
-                    cbDesktop->setChecked(onDesktop);
-                    scRow->addWidget(cbDesktop);
-
-                    auto *cbMenu = new QCheckBox(T("Start menu"));
-                    cbMenu->setObjectName("cbMenu");
-                    cbMenu->setChecked(inMenu);
-                    scRow->addWidget(cbMenu);
-
-                    connect(cbDesktop, &QCheckBox::toggled, this, [this, scId, item](bool checked) {
-                        list->setCurrentItem(item);
-                        toggleShortcut(scId, "desktop", checked);
-                    });
-                    connect(cbMenu, &QCheckBox::toggled, this, [this, scId, item](bool checked) {
-                        list->setCurrentItem(item);
-                        toggleShortcut(scId, "menu", checked);
-                    });
-
-                    panelLayout->addLayout(scRow);
-                }
-
-                panel->setVisible(isExpanded);
-
-                connect(expandBtn, &QPushButton::clicked, this, [this, key, expandBtn, panel, item, container, shortcuts] {
-                    list->setCurrentItem(item);
-                    bool nowExpanded = !panel->isVisible();
-                    panel->setVisible(nowExpanded);
-                    if (nowExpanded) expandedKeys.insert(key);
-                    else expandedKeys.remove(key);
-                    expandBtn->setText(T("Shortcuts (%1) %2").arg(shortcuts.size()).arg(nowExpanded ? "▾" : "▸"));
-                    container->adjustSize();
-                    item->setSizeHint(container->sizeHint());
-                });
-            }
-
-            auto *uninstallBtn = button(T("Uninstall"), "itemUninstall");
-            uninstallBtn->setToolTip(T("Uninstall “%1”?\n\nThe app’s own uninstall wizard will open.").arg(name));
-            uninstallBtn->setEnabled(!busy);
-            connect(uninstallBtn, &QPushButton::clicked, this, [this, key, name, item] {
-                list->setCurrentItem(item);
-                confirmAndUninstall(key, name);
-            });
-            headerLayout->addWidget(uninstallBtn);
-
             mainLayout->addWidget(header);
-            if (panel) mainLayout->addWidget(panel);
+            container->setAttribute(Qt::WA_TransparentForMouseEvents);
 
             container->adjustSize();
             item->setSizeHint(container->sizeHint());
@@ -391,6 +354,11 @@ class Manager : public QWidget {
         }
         detailText->setText(item ? (isRunning ? (T("Active Now") + "  ·  " + T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.")) : T("Installed in your shared Windows environment. Uninstalling opens the app’s own wizard.")) : T("Your Windows apps, all in one place."));
         removeButton->setEnabled(item && !busy);
+        auto selected = selectedProgram();
+        QString installPath = selected["install_path"].toString();
+        filesButton->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
+        filesButton->setToolTip(filesButton->isEnabled() ? installPath : T("Installation folder is unavailable."));
+        updateDetailShortcuts(selected);
         updateKillButtonState();
     }
     void finished(int code, QProcess::ExitStatus exitStatus) {
@@ -557,6 +525,8 @@ public:
         auto *left = new QVBoxLayout; left->setSpacing(0);
         list = new QListWidget; list->setObjectName("programList");
         list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        list->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(list, &QListWidget::customContextMenuRequested, this, &Manager::showProgramMenu);
         left->addWidget(list);
         empty = label(T("Loading your apps …"), "muted");
         empty->setAlignment(Qt::AlignCenter); empty->setWordWrap(true);
@@ -580,6 +550,18 @@ public:
 
         dl->addStretch();
 
+        shortcutButton = button(T("No shortcuts"), "shortcutToggle");
+        shortcutButton->setEnabled(false);dl->addWidget(shortcutButton);
+        shortcutScroll = new QScrollArea;
+        shortcutScroll->setWidgetResizable(true);
+        shortcutScroll->setFrameShape(QFrame::NoFrame);
+        shortcutScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        shortcutScroll->setMaximumHeight(200);
+        shortcutsPanel = new QFrame;shortcutsPanel->setObjectName("shortcutsPanel");
+        auto *shortcutsLayout = new QVBoxLayout(shortcutsPanel);
+        shortcutsLayout->setContentsMargins(8,8,8,8);shortcutsLayout->setSpacing(12);
+        shortcutScroll->setWidget(shortcutsPanel);shortcutScroll->hide();dl->addWidget(shortcutScroll);
+        filesButton = button(T("Show files"), "showFilesButton");filesButton->setEnabled(false);dl->addWidget(filesButton);
         killButton = button(T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
         removeButton = button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton);
 
@@ -612,6 +594,15 @@ public:
         connect(killButton, &QPushButton::clicked, this, [this] {
             if (selectedKey.isEmpty() || busy) return;
             confirmAndKill(selectedKey, detailName->text());
+        });
+        connect(filesButton, &QPushButton::clicked, this, [this] {
+            if (!busy) showFiles(selectedProgram()["install_path"].toString());
+        });
+        connect(shortcutButton, &QPushButton::clicked, this, [this] {
+            if (selectedKey.isEmpty() || busy) return;
+            if (expandedKeys.contains(selectedKey)) expandedKeys.remove(selectedKey);
+            else expandedKeys.insert(selectedKey);
+            updateDetailShortcuts(selectedProgram());
         });
         connect(removeButton, &QPushButton::clicked, this, [this] {
             if (selectedKey.isEmpty() || busy) return;

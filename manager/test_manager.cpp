@@ -21,9 +21,54 @@
 #include <QtTest>
 #include "main.cpp"
 
+class FileUrlRecorder : public QObject {
+    Q_OBJECT
+public:
+    QUrl opened;
+public slots:
+    void record(const QUrl &url) { opened = url; }
+};
+
 class ManagerTest : public QObject {
     Q_OBJECT
 private slots:
+    void showFilesOpensProgramDirectory() {
+        QTemporaryDir dir;
+        QString installPath = dir.filePath("My App");
+        QVERIFY(QDir().mkpath(installPath));
+        QString script=dir.filePath("backend.py");
+        QFile file(script);QVERIFY(file.open(QIODevice::WriteOnly));
+        QJsonArray apps{QJsonObject{{"key","a"},{"name","App"},{"install_path",installPath}},QJsonObject{{"key","b"},{"name","Unknown folder"}}};
+        QJsonObject data{{"ready",true},{"proton","Test"},{"prefix",dir.path()},{"programs",apps}};
+        file.write("print("+QJsonDocument(QJsonArray{QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))}).toJson(QJsonDocument::Compact).mid(1).chopped(1)+")");file.close();
+        FileUrlRecorder recorder;
+        QDesktopServices::setUrlHandler("file", &recorder, "record");
+        auto cleanup = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
+        Manager window(script);window.show();
+        auto *list=window.findChild<QListWidget*>("programList");
+        QTRY_COMPARE_WITH_TIMEOUT(list->count(),2,5000);
+        QVERIFY(list->findChildren<QAbstractButton*>().isEmpty());
+        auto *files=window.findChild<QPushButton*>("showFilesButton");
+        QVERIFY(files);QVERIFY(!files->isEnabled());
+        list->setCurrentRow(1);QVERIFY(!files->isEnabled());
+        list->setCurrentRow(0);QVERIFY(files->isEnabled());
+        QCOMPARE(files->text(),QString("Show files"));
+        files->click();QCOMPARE(recorder.opened.toLocalFile(),installPath);
+        QCOMPARE(list->currentRow(),0);
+
+        // A context menu must act on the clicked row, even if another is selected.
+        list->setCurrentRow(1);recorder.opened=QUrl();
+        QPoint position=list->visualItemRect(list->item(0)).center();
+        QContextMenuEvent event(QContextMenuEvent::Mouse,position,list->viewport()->mapToGlobal(position));
+        QApplication::sendEvent(list->viewport(),&event);
+        auto *context=window.findChild<QMenu*>("programContextMenu");QVERIFY(context);
+        QCOMPARE(list->currentRow(),0);
+        auto *open=context->findChild<QAction*>("contextShowFiles");QVERIFY(open && open->isEnabled());
+        open->trigger();context->close();
+        QCOMPARE(recorder.opened.toLocalFile(),installPath);
+        QVERIFY(QDir().rmdir(installPath));recorder.opened=QUrl();
+        files->click();QVERIFY(recorder.opened.isEmpty());
+    }
     void protonDownloadPreservesEditsAndRecoversFromFailure() {
         QTemporaryDir dir;
         QString script=dir.filePath("backend.py");
@@ -177,6 +222,7 @@ print(json.dumps(data))
         Manager window(script); window.show();
         auto *list = window.findChild<QListWidget*>("programList");
         QTRY_COMPARE_WITH_TIMEOUT(list->count(), 1, 5000);
+        list->setCurrentRow(0);
         auto *toggle = window.findChild<QPushButton*>("shortcutToggle");
         QVERIFY(toggle != nullptr);
         auto *panel = window.findChild<QFrame*>("shortcutsPanel");
@@ -216,8 +262,7 @@ print(json.dumps(data))
         QVERIFY(runningBadge != nullptr);
         QVERIFY(runningBadge->text().contains("Running") || runningBadge->text().contains("Kjører"));
 
-        auto *itemKill = window.findChild<QPushButton*>("itemKill");
-        QVERIFY(itemKill != nullptr);
+        QVERIFY(list->findChildren<QAbstractButton*>().isEmpty());
 
         auto *detailKill = window.findChild<QPushButton*>("killAppButton");
         QVERIFY(detailKill != nullptr);
@@ -253,7 +298,7 @@ print(json.dumps(data))
         QVERIFY(recorded.contains("kill"));
         QVERIFY(recorded.contains("--key run1"));
     }
-    void itemListUninstallButton() {
+    void contextMenuUninstall() {
         QTemporaryDir dir;
         QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
         QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
@@ -261,9 +306,13 @@ print(json.dumps(data))
         Manager window(script); window.show();
         auto *list = window.findChild<QListWidget*>("programList");
         QTRY_COMPARE_WITH_TIMEOUT(list->count(), 1, 5000);
-        auto *itemUninstall = window.findChild<QPushButton*>("itemUninstall");
-        QVERIFY(itemUninstall != nullptr);
-        QVERIFY(itemUninstall->isEnabled());
+        QVERIFY(list->findChildren<QAbstractButton*>().isEmpty());
+        QPoint position=list->visualItemRect(list->item(0)).center();
+        QContextMenuEvent event(QContextMenuEvent::Mouse,position,list->viewport()->mapToGlobal(position));
+        QApplication::sendEvent(list->viewport(),&event);
+        auto *context=window.findChild<QMenu*>("programContextMenu");QVERIFY(context);
+        auto *uninstall=context->findChild<QAction*>("contextUninstall");QVERIFY(uninstall && uninstall->isEnabled());
+        auto *files=context->findChild<QAction*>("contextShowFiles");QVERIFY(files && !files->isEnabled());
         QTimer::singleShot(20, []() {
             auto *box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
             if (box) {
@@ -275,7 +324,7 @@ print(json.dumps(data))
                 }
             }
         });
-        itemUninstall->click();
+        context->hide();uninstall->trigger();context->close();
         QTRY_COMPARE_WITH_TIMEOUT(list->count(), 0, 5000);
         QFile callFile(calls);
         QVERIFY(callFile.open(QIODevice::ReadOnly));

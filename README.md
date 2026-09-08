@@ -25,6 +25,7 @@ By default, WinBridge reuses one shared Wine/Proton environment (a "prefix") for
 Open **WinBridge Manager** from your application menu to browse and manage your Windows programs.
 
 - **Program library and search:** Browse registered programs with their icons and quickly filter the list.
+- **Program actions:** Select a program to manage its shortcuts, show its files, stop it, or uninstall it in the detail panel. Right-click a program for **Uninstall** and **Show files**. Opening files requires a registered installation folder that still exists.
 - **Uninstall programs:** Launch a program's Windows uninstaller and automatically clean up its shortcuts and icons afterward.
 - **Control shortcuts:** Enable or disable desktop and application menu entries independently for each app.
 - **Manage running apps:** See which programs are running and stop frozen processes with **Kill app**.

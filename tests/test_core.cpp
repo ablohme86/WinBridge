@@ -44,6 +44,21 @@ class CoreTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void programInstallationDirectories() {
+        QTemporaryDir tmp;
+        QString app = tmp.filePath("pfx/drive_c/Program Files/My App");
+        QVERIFY(QDir().mkpath(app));
+        QCOMPARE(programInstallDirectory(tmp.path(), "Program Files/My App"), app);
+        QCOMPARE(programInstallDirectory(tmp.path(), "c:\\program files\\MY APP\\"), app);
+        QCOMPARE(programInstallDirectory(tmp.path(), "\"C:/Program Files/My App\""), app);
+        QVERIFY(programInstallDirectory(tmp.path(), "").isEmpty());
+        QVERIFY(programInstallDirectory(tmp.path(), "C:/Missing App").isEmpty());
+        QVERIFY(programInstallDirectory(tmp.path(), "../outside").isEmpty());
+        QString external = tmp.filePath("external/Games/Demo");
+        QVERIFY(QDir().mkpath(external));QVERIFY(QDir().mkpath(tmp.filePath("pfx/dosdevices")));
+        QVERIFY(QFile::link(tmp.filePath("external"), tmp.filePath("pfx/dosdevices/d:")));
+        QCOMPARE(programInstallDirectory(tmp.path(), "D:/Games/Demo"), external);
+    }
     void steamRuntimeFallbackWithoutUmu() {
         QTemporaryDir tmp;
         ScopedEnvironment env;

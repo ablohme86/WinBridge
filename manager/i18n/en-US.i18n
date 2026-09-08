@@ -118,6 +118,9 @@
     "Could not create the Proton setup directory.": "Could not create the Proton setup directory.",
     "Could not create the Windows environment directory.": "Could not create the Windows environment directory.",
     "Proton setup did not complete. Check the WinBridge launch logs.": "Proton setup did not complete. Check the WinBridge launch logs.",
-    "Could not read installed programs. Check the WinBridge launch logs.": "Could not read installed programs. Check the WinBridge launch logs."
+    "Could not read installed programs. Check the WinBridge launch logs.": "Could not read installed programs. Check the WinBridge launch logs.",
+    "Show files": "Show files",
+    "Installation folder is unavailable.": "Installation folder is unavailable.",
+    "Could not open the installation folder.": "Could not open the installation folder."
   }
 }

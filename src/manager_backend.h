@@ -43,6 +43,7 @@ QJsonObject killProgram(
 );
 
 QMap<QString, QString> programIcons(const QString &prefix);
+QString programInstallDirectory(const QString &prefix, const QString &location);
 
 QJsonObject operate(
     const QString &action,

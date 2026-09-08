@@ -118,6 +118,9 @@
     "Could not create the Proton setup directory.": "Kunne ikke opprette mappen for Proton-oppsett.",
     "Could not create the Windows environment directory.": "Kunne ikke opprette mappen til Windows-miljøet.",
     "Proton setup did not complete. Check the WinBridge launch logs.": "Proton-oppsettet ble ikke fullført. Se oppstartsloggene til WinBridge.",
-    "Could not read installed programs. Check the WinBridge launch logs.": "Kunne ikke lese installerte programmer. Se oppstartsloggene til WinBridge."
+    "Could not read installed programs. Check the WinBridge launch logs.": "Kunne ikke lese installerte programmer. Se oppstartsloggene til WinBridge.",
+    "Show files": "Vis filer",
+    "Installation folder is unavailable.": "Installasjonsmappen er ikke tilgjengelig.",
+    "Could not open the installation folder.": "Kunne ikke åpne installasjonsmappen."
   }
 }
