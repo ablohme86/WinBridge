@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Outer chassis -->
+  <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#94a3b8" stroke="#1e293b" stroke-width="0.8"/>
+  <!-- Metal plate cover -->
+  <rect x="2" y="4" width="12" height="6.5" rx="0.5" fill="#e2e8f0" stroke="#64748b" stroke-width="0.5"/>
+  <!-- Platter spindle -->
+  <circle cx="5.5" cy="7.2" r="2.2" fill="#cbd5e1" stroke="#94a3b8" stroke-width="0.5"/>
+  <circle cx="5.5" cy="7.2" r="0.8" fill="#475569"/>
+  <!-- C: text badge -->
+  <text x="11" y="8.8" font-family="'Segoe UI', Arial, sans-serif" font-weight="900" font-size="4.5" fill="#1d4ed8" text-anchor="middle">C:</text>
+  <!-- Green LED light -->
+  <circle cx="3" cy="11.4" r="0.9" fill="#22c55e" stroke="#15803d" stroke-width="0.4"/>
+</svg>

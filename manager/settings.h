@@ -761,7 +761,7 @@ public:
         downloadVersion->addItem("GE-Proton","GE-Proton");
         downloadVersion->addItem("UMU-Proton","UMU-Proton");
         downloadRow->addWidget(downloadVersion,1);
-        download=new QPushButton(T("Download Proton"));download->setObjectName("downloadProton");downloadRow->addWidget(download);
+        download=new QPushButton(QIcon(":/icons/download.png"), T("Download Proton"));download->setIconSize(QSize(16, 16));download->setObjectName("downloadProton");downloadRow->addWidget(download);
         layout->addLayout(downloadRow);
         layout->addWidget(label("Downloads Proton and the required runtime. Steam is not required. Automatic versions check for updates when launched.","muted"));
         downloadProgress=new QProgressBar;downloadProgress->setObjectName("downloadProgress");downloadProgress->setRange(0,0);downloadProgress->hide();layout->addWidget(downloadProgress);
@@ -769,12 +769,12 @@ public:
         layout->addWidget(label("Proton / Wine install directory"));
         auto *prefixRow=new QHBoxLayout;prefixRow->setSpacing(8);
         prefix=new QLineEdit;prefix->setObjectName("prefix");prefixRow->addWidget(prefix,1);
-        browse=new QPushButton(T("Browse …"));browse->setObjectName("browse");prefixRow->addWidget(browse);
+        browse=new QPushButton(QIcon(":/icons/show-files.png"), T("Browse …"));browse->setIconSize(QSize(16, 16));browse->setObjectName("browse");prefixRow->addWidget(browse);
         layout->addLayout(prefixRow);
         layout->addWidget(label("Location of your shared Windows environment and installed apps.","muted"));
 
         message=label("Loading installed Proton versions …","muted");layout->addWidget(message);
-        auto *buttons=new QHBoxLayout;buttons->addStretch();cancel=new QPushButton(T("Cancel"));save=new QPushButton(T("Save changes"));save->setObjectName("primary");save->setEnabled(false);buttons->addWidget(cancel);buttons->addWidget(save);layout->addLayout(buttons);
+        auto *buttons=new QHBoxLayout;buttons->addStretch();cancel=new QPushButton(T("Cancel"));save=new QPushButton(QIcon(":/icons/save.png"), T("Save changes"));save->setIconSize(QSize(16, 16));save->setObjectName("primary");save->setEnabled(false);buttons->addWidget(cancel);buttons->addWidget(save);layout->addLayout(buttons);
         process=new QProcess(this);
         connect(process,&QProcess::readyReadStandardOutput,this,[this]{output+=process->readAllStandardOutput();});
         connect(process,&QProcess::readyReadStandardError,this,[this]{process->readAllStandardError();});

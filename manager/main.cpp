@@ -58,6 +58,13 @@ class Manager : public QWidget {
         if (name) b->setObjectName(name);
         return b;
     }
+    QPushButton *button(const QIcon &icon, const QString &text, const char *name = nullptr) {
+        auto *b = new QPushButton(icon, text);
+        b->setIconSize(QSize(16, 16));
+        b->setCursor(Qt::PointingHandCursor);
+        if (name) b->setObjectName(name);
+        return b;
+    }
     void showAppIcon(QLabel *target, const QString &path, const QString &fallback, int size) {
         target->clear();
         QPixmap pixmap;
@@ -103,10 +110,10 @@ class Manager : public QWidget {
         auto *menu = new QMenu(list);
         menu->setObjectName("programContextMenu");
         menu->setAttribute(Qt::WA_DeleteOnClose);
-        auto *uninstall = menu->addAction(T("Uninstall"));
+        auto *uninstall = menu->addAction(QIcon(":/icons/uninstall.png"), T("Uninstall"));
         uninstall->setObjectName("contextUninstall");uninstall->setEnabled(!busy);
         connect(uninstall, &QAction::triggered, this, [this, key, name] { confirmAndUninstall(key, name); });
-        auto *files = menu->addAction(T("Show files"));
+        auto *files = menu->addAction(QIcon(":/icons/show-files.png"), T("Show files"));
         files->setObjectName("contextShowFiles");
         files->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
         connect(files, &QAction::triggered, this, [this, installPath] { if (!busy) showFiles(installPath); });
@@ -473,17 +480,17 @@ public:
         search->setFixedWidth(240);
         navLayout->addWidget(search);
 
-        refreshButton = button(T("↻  Refresh"));
+        refreshButton = button(QIcon(":/icons/refresh.png"), T("Refresh"));
         navLayout->addWidget(refreshButton);
 
-        folderButton = button(T("Open C: Drive"));
+        folderButton = button(QIcon(":/icons/drive-c.png"), T("Open C: Drive"));
         folderButton->setEnabled(false);
         navLayout->addWidget(folderButton);
 
-        configureButton = button(T("Settings"));
+        configureButton = button(QIcon(":/icons/settings.png"), T("Settings"));
         navLayout->addWidget(configureButton);
 
-        aboutButton = button(T("About"), "aboutButton");
+        aboutButton = button(QIcon(":/icons/about.png"), T("About"), "aboutButton");
         navLayout->addWidget(aboutButton);
 
         windowLayout->addWidget(topNav);
@@ -550,7 +557,7 @@ public:
 
         dl->addStretch();
 
-        shortcutButton = button(T("No shortcuts"), "shortcutToggle");
+        shortcutButton = button(QIcon(":/icons/shortcut.png"), T("No shortcuts"), "shortcutToggle");
         shortcutButton->setEnabled(false);dl->addWidget(shortcutButton);
         shortcutScroll = new QScrollArea;
         shortcutScroll->setWidgetResizable(true);
@@ -561,9 +568,9 @@ public:
         auto *shortcutsLayout = new QVBoxLayout(shortcutsPanel);
         shortcutsLayout->setContentsMargins(8,8,8,8);shortcutsLayout->setSpacing(12);
         shortcutScroll->setWidget(shortcutsPanel);shortcutScroll->hide();dl->addWidget(shortcutScroll);
-        filesButton = button(T("Show files"), "showFilesButton");filesButton->setEnabled(false);dl->addWidget(filesButton);
-        killButton = button(T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
-        removeButton = button(T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton);
+        filesButton = button(QIcon(":/icons/show-files.png"), T("Show files"), "showFilesButton");filesButton->setEnabled(false);dl->addWidget(filesButton);
+        killButton = button(QIcon(":/icons/kill.png"), T("Kill app"), "killAppButton"); killButton->setEnabled(false); dl->addWidget(killButton);
+        removeButton = button(QIcon(":/icons/uninstall.png"), T("Uninstall app"), "danger"); removeButton->setEnabled(false); dl->addWidget(removeButton);
 
         body->addWidget(detail);
         contentArea->addLayout(body, 1);

@@ -1,4 +1,31 @@
-<RCC><qresource prefix="/i18n">
-<file alias="en-US.i18n">i18n/en-US.i18n</file>
-<file alias="no-NB.i18n">i18n/no-NB.i18n</file>
-</qresource><qresource prefix="/assets"><file alias="winbridge.png">../assets/winbridge.png</file></qresource></RCC>
+<RCC>
+    <qresource prefix="/i18n">
+        <file alias="en-US.i18n">i18n/en-US.i18n</file>
+        <file alias="no-NB.i18n">i18n/no-NB.i18n</file>
+    </qresource>
+    <qresource prefix="/assets">
+        <file alias="winbridge.png">../assets/winbridge.png</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="uninstall.png">icons/uninstall.png</file>
+        <file alias="uninstall@2x.png">icons/uninstall@2x.png</file>
+        <file alias="show-files.png">icons/show-files.png</file>
+        <file alias="show-files@2x.png">icons/show-files@2x.png</file>
+        <file alias="shortcut.png">icons/shortcut.png</file>
+        <file alias="shortcut@2x.png">icons/shortcut@2x.png</file>
+        <file alias="kill.png">icons/kill.png</file>
+        <file alias="kill@2x.png">icons/kill@2x.png</file>
+        <file alias="refresh.png">icons/refresh.png</file>
+        <file alias="refresh@2x.png">icons/refresh@2x.png</file>
+        <file alias="drive-c.png">icons/drive-c.png</file>
+        <file alias="drive-c@2x.png">icons/drive-c@2x.png</file>
+        <file alias="settings.png">icons/settings.png</file>
+        <file alias="settings@2x.png">icons/settings@2x.png</file>
+        <file alias="about.png">icons/about.png</file>
+        <file alias="about@2x.png">icons/about@2x.png</file>
+        <file alias="download.png">icons/download.png</file>
+        <file alias="download@2x.png">icons/download@2x.png</file>
+        <file alias="save.png">icons/save.png</file>
+        <file alias="save@2x.png">icons/save@2x.png</file>
+    </qresource>
+</RCC>

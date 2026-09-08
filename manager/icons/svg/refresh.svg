@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Top-right arc -->
+  <path d="M 8 2.2 A 5.8 5.8 0 0 1 13.8 8" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M 8 2.2 A 5.8 5.8 0 0 1 13.8 8" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round"/>
+  <polygon points="10.8,0.8 15.2,1.8 14.2,6" fill="#0284c7" stroke="#0369a1" stroke-width="0.6"/>
+  <!-- Bottom-left arc -->
+  <path d="M 8 13.8 A 5.8 5.8 0 0 1 2.2 8" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M 8 13.8 A 5.8 5.8 0 0 1 2.2 8" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round"/>
+  <polygon points="5.2,15.2 0.8,14.2 1.8,10" fill="#0284c7" stroke="#0369a1" stroke-width="0.6"/>
+</svg>

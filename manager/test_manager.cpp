@@ -358,6 +358,19 @@ print(json.dumps(data))
         aboutBtn->click();
         QVERIFY(verifiedDialog);
     }
+    void buttonsHaveIcons() {
+        Manager window("");
+        auto *files = window.findChild<QPushButton*>("showFilesButton");
+        auto *shortcut = window.findChild<QPushButton*>("shortcutToggle");
+        auto *danger = window.findChild<QPushButton*>("danger");
+        auto *kill = window.findChild<QPushButton*>("killAppButton");
+        auto *about = window.findChild<QPushButton*>("aboutButton");
+        QVERIFY(files && !files->icon().isNull());
+        QVERIFY(shortcut && !shortcut->icon().isNull());
+        QVERIFY(danger && !danger->icon().isNull());
+        QVERIFY(kill && !kill->icon().isNull());
+        QVERIFY(about && !about->icon().isNull());
+    }
 };
 QTEST_MAIN(ManagerTest)
 #include "test_manager.moc"

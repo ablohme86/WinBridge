@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <polygon points="5,1 11,1 15,5 15,11 11,15 5,15 1,11 1,5" fill="#dc2626" stroke="#450a0a" stroke-width="0.9" stroke-linejoin="round"/>
+  <polyline points="2.2,5 5,2.2 11,2.2 13.8,5" fill="none" stroke="#f87171" stroke-width="0.8"/>
+  <line x1="5" y1="5" x2="11" y2="11" stroke="#ffffff" stroke-width="1.9" stroke-linecap="square"/>
+  <line x1="11" y1="5" x2="5" y2="11" stroke="#ffffff" stroke-width="1.9" stroke-linecap="square"/>
+</svg>
