@@ -7,7 +7,7 @@ Icon=winbridge
 Terminal=false
 Categories=Utility;
 Actions=Configure;
-MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-dosexec;
 
 [Desktop Action Configure]
 Name=Choose Proton version

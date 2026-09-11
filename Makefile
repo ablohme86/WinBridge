@@ -85,13 +85,8 @@ install: build
 	@if [ -z "$(DESTDIR)" ] && command -v gtk-update-icon-cache >/dev/null 2>&1; then \
 		gtk-update-icon-cache -f -t $(DATADIR)/icons/hicolor 2>/dev/null || true; \
 	fi
-	@if [ -z "$(DESTDIR)" ] && command -v kbuildsycoca6 >/dev/null 2>&1; then \
-		kbuildsycoca6 --noincremental 2>/dev/null || true; \
-	fi
-	@if [ -z "$(DESTDIR)" ] && command -v xdg-mime >/dev/null 2>&1; then \
-		for mime in application/x-ms-dos-executable application/x-msdownload application/vnd.microsoft.portable-executable; do \
-			PATH="/usr/lib/qt6/bin:$$PATH" xdg-mime default winbridge.desktop $$mime 2>/dev/null || true; \
-		done; \
+	@if [ -z "$(DESTDIR)" ]; then \
+		sh packaging/register-file-associations.sh "$(APPLICATIONSDIR)/winbridge.desktop" "$(abspath $(BINDIR))/winbridge"; \
 	fi
 	@echo "WinBridge successfully installed and updated (PREFIX=$(PREFIX))"
 

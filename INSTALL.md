@@ -41,6 +41,10 @@ make install-user
 
 This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run `sudo make install` to install system-wide to `/usr/local`.
 
+Both `make install` and `make install-user` register `.exe` associations through XDG and, when available, GIO for Nemo, Nautilus (Files), Caja, Thunar, PCManFM and Dolphin. With `sudo make install`, associations are configured for the user who invoked sudo. A root installation without `SUDO_USER` only installs the application; run `make install-user` from your desktop account to set your defaults. Package staging with `DESTDIR` does not change user associations.
+
+The user launcher uses the installed executable's absolute path, so it also works when your file manager does not have `~/.local/bin` on its `PATH`. Registration follows the [freedesktop MIME application association standard](https://specifications.freedesktop.org/mime-apps/latest/file.html). If a running file manager still shows the old handler, close and reopen it.
+
 ## Set up Proton without Steam
 
 Install [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher#packaging) using your distribution's package or the upstream installation instructions. WinBridge finds `umu-run` on `PATH` or in `~/.local/bin`. Building WinBridge does not install UMU. On Debian and Fedora, check upstream's distribution instructions if your repositories do not provide `umu-launcher`.
