@@ -7,6 +7,7 @@
 #include "opener.h"
 #include "executable_icon.h"
 #include "shortcuts.h"
+#include "single_instance.h"
 
 #include <QtWidgets>
 #include <QJsonArray>
@@ -66,6 +67,30 @@ bool rememberExecutable(const QString &exePath, const QString &customPath) {
     return file.commit();
 }
 
+QString managerExecutablePath(const QString &launcherPath) {
+    QStringList candidates;
+    if (!launcherPath.isEmpty()) {
+        candidates << QFileInfo(launcherPath).absoluteDir().filePath("winbridge-manager");
+    }
+    const QString appDir = QCoreApplication::applicationDirPath();
+    candidates << QDir(appDir).filePath("winbridge-manager")
+               << QDir(appDir).filePath("manager/winbridge-manager");
+    const QString fromPath = QStandardPaths::findExecutable("winbridge-manager");
+    if (!fromPath.isEmpty()) candidates << fromPath;
+    candidates << QDir::homePath() + "/.local/bin/winbridge-manager"
+               << QDir::homePath() + "/.local/share/winbridge/winbridge-manager"
+               << "/usr/local/bin/winbridge-manager"
+               << "/usr/bin/winbridge-manager";
+    for (const QString &candidate : candidates) {
+        QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable()) {
+            const QString canonical = info.canonicalFilePath();
+            return canonical.isEmpty() ? info.absoluteFilePath() : canonical;
+        }
+    }
+    return {};
+}
+
 class ExecutableOpener final : public QDialog {
 public:
     explicit ExecutableOpener(const QString &launcher, const QString &theme, QWidget *parent = nullptr)
@@ -103,6 +128,12 @@ public:
         titles->addWidget(title);
         titles->addWidget(subtitle);
         headingRow->addLayout(titles, 1);
+        auto *managerButton = new QPushButton(resolveManagerIcon(), tr("WinBridge Manager"));
+        managerButton->setObjectName("managerButton");
+        managerButton->setIconSize(QSize(22, 22));
+        managerButton->setCursor(Qt::PointingHandCursor);
+        managerButton->setToolTip(tr("Open WinBridge Manager"));
+        headingRow->addWidget(managerButton, 0, Qt::AlignVCenter);
         root->addWidget(topNav);
 
         auto *content = new QVBoxLayout;
@@ -210,6 +241,20 @@ public:
         });
         connect(desktopAction, &QAction::triggered, this, [this] { makeShortcut(ShortcutLocation::Desktop); });
         connect(menuAction, &QAction::triggered, this, [this] { makeShortcut(ShortcutLocation::StartMenu); });
+        connect(managerButton, &QPushButton::clicked, this, [this] {
+            const QString token = activationTokenForWindow(windowHandle(), "winbridge-manager");
+            if (activateRunningInstance("manager", token)) return;
+            const QString manager = managerExecutablePath(launcherPath);
+            if (manager.isEmpty()) {
+                QMessageBox::critical(this, tr("WinBridge"),
+                    tr("WinBridge Manager could not be found. Install it and try again."));
+                return;
+            }
+            if (!QProcess::startDetached(manager, {})) {
+                QMessageBox::critical(this, tr("WinBridge"),
+                    tr("WinBridge Manager could not be opened."));
+            }
+        });
         connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
         connect(openButton, &QPushButton::clicked, this, [this] { openSelected(); });
 
@@ -246,6 +291,21 @@ private:
             if (QFileInfo(candidate).isFile()) return QIcon(candidate);
         }
         return QIcon::fromTheme("winbridge");
+    }
+
+    static QIcon resolveManagerIcon() {
+        const QString appDir = QCoreApplication::applicationDirPath();
+        const QStringList candidates = {
+            appDir + "/../share/pixmaps/winbridge-manager.png",
+            appDir + "/../assets/winbridge-manager-icon.png",
+            appDir + "/../../assets/winbridge-manager-icon.png",
+            "/usr/local/share/pixmaps/winbridge-manager.png",
+            "/usr/share/pixmaps/winbridge-manager.png"
+        };
+        for (const QString &candidate : candidates) {
+            if (QFileInfo(candidate).isFile()) return QIcon(candidate);
+        }
+        return QIcon::fromTheme("winbridge-manager");
     }
 
     void populateRecents() {
@@ -328,6 +388,7 @@ private:
             QPushButton:disabled { color: {{shadow}}; border-right-color: {{shadow}}; border-bottom-color: {{shadow}}; }
             QPushButton#primary { min-width: 92px; }
             QPushButton#shortcutButton { min-width: 160px; }
+            QPushButton#managerButton { min-height: 34px; padding: 3px 12px; }
             QToolButton#clearButton { border: none; color: {{accent}}; padding: 4px; background: transparent; font-weight: bold; }
             QMenu { background: {{face}}; color: {{text}}; border-top: 2px solid {{light}}; border-left: 2px solid {{light}}; border-right: 2px solid {{darkshadow}}; border-bottom: 2px solid {{darkshadow}}; padding: 3px; }
             QMenu::item { padding: 7px 28px 7px 10px; }
@@ -356,6 +417,10 @@ OpenRequest showExecutableOpener(
     const QString &theme
 ) {
     ExecutableOpener dialog(launcher, theme, parent);
+    InstanceActivationServer activationServer("launcher", [&dialog](const QString &token) {
+        bringWindowToForeground(&dialog, token);
+    });
+    if (screenshotPath.isEmpty()) activationServer.start();
     OpenRequest request;
     if (!screenshotPath.isEmpty()) {
         QTimer::singleShot(250, &dialog, [&] {

@@ -20,6 +20,7 @@
 #include "shortcuts.h"
 #include "launcher.h"
 #include "opener.h"
+#include "single_instance.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -212,6 +213,12 @@ int main(int argc, char **argv) {
     if (graphicalOpener) {
         QApplication app(argc, argv);
         app.setDesktopFileName("winbridge");
+        bool screenshot = false;
+        for (int i = 1; i < argc; ++i) {
+            const QString argument = QString::fromLocal8Bit(argv[i]);
+            if (argument == "--screenshot" || argument.startsWith("--screenshot=")) { screenshot = true; break; }
+        }
+        if (!screenshot && activateRunningInstance("launcher", qEnvironmentVariable("XDG_ACTIVATION_TOKEN"))) return 0;
         return runWinBridge(app, true);
     }
     QCoreApplication app(argc, argv);

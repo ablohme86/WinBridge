@@ -16,6 +16,7 @@ namespace WinBridge {
 QString recentExecutablesPath();
 QStringList recentExecutables(const QString &customPath = "");
 bool rememberExecutable(const QString &exePath, const QString &customPath = "");
+QString managerExecutablePath(const QString &launcherPath = "");
 
 struct OpenRequest {
     bool accepted = false;

@@ -370,6 +370,19 @@ inline QString retroStyleSheet(QString theme = QString()) {
             border-bottom: 2px solid {{btnLight}};
             color: {{accent}};
         }
+        QPushButton#endTaskButton {
+            background: {{dangerBg}};
+            color: {{dangerText}};
+            border-top: 2px solid {{btnLight}};
+            border-left: 2px solid {{btnLight}};
+            border-right: 2px solid {{btnDarkShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            border-radius: 0px;
+            padding: 6px 14px;
+            font-weight: bold;
+        }
+        QPushButton#endTaskButton:hover { background: {{dangerHoverBg}}; color: {{dangerHoverText}}; }
+        QPushButton#endTaskButton:disabled { background: {{btnFace}}; color: {{btnShadow}}; }
         QPushButton#shortcutToggle {
             background: {{btnFace}};
             border-top: 2px solid {{btnLight}};
@@ -488,6 +501,36 @@ inline QString retroStyleSheet(QString theme = QString()) {
         QListWidget#programList::item:selected {
             background: {{itemSelect}};
             border: 2px solid {{itemSelectBorder}};
+        }
+        QTreeWidget#taskList {
+            background: {{windowBg}};
+            alternate-background-color: {{itemHover}};
+            color: {{textMain}};
+            border-top: 2px solid {{btnShadow}};
+            border-left: 2px solid {{btnShadow}};
+            border-right: 2px solid {{btnLight}};
+            border-bottom: 2px solid {{btnLight}};
+            outline: 0;
+            font-size: 12px;
+        }
+        QTreeWidget#taskList::item {
+            min-height: 38px;
+            padding: 5px;
+            border-bottom: 1px solid {{listDivider}};
+        }
+        QTreeWidget#taskList::item:selected {
+            background: {{itemSelect}};
+            color: {{textMain}};
+        }
+        QHeaderView::section {
+            background: {{btnFace}};
+            color: {{textMain}};
+            padding: 7px;
+            border-top: 1px solid {{btnLight}};
+            border-left: 1px solid {{btnLight}};
+            border-right: 1px solid {{btnShadow}};
+            border-bottom: 2px solid {{btnDarkShadow}};
+            font-weight: bold;
         }
         QScrollBar:vertical {
             background: {{scrollTrack}};

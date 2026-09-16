@@ -5,6 +5,7 @@
     </qresource>
     <qresource prefix="/assets">
         <file alias="winbridge.png">../assets/winbridge-manager-icon.png</file>
+        <file alias="launcher.png">../assets/winbridge-app-launcher.png</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="uninstall.png">icons/uninstall.png</file>

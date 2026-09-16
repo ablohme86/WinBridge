@@ -25,14 +25,38 @@
 #include "i18n.h"
 #include "settings.h"
 #include "about.h"
+#include "single_instance.h"
+
+static QString launcherExecutablePath(const QString &managerPath = {}) {
+    QStringList candidates;
+    if (!managerPath.isEmpty()) {
+        QDir directory = QFileInfo(managerPath).absoluteDir();
+        candidates << directory.filePath("winbridge") << directory.filePath("../winbridge");
+    }
+    QDir appDirectory(QCoreApplication::applicationDirPath());
+    candidates << appDirectory.filePath("winbridge") << appDirectory.filePath("../winbridge");
+    const QString fromPath = QStandardPaths::findExecutable("winbridge");
+    if (!fromPath.isEmpty()) candidates << fromPath;
+    candidates << QDir::homePath() + "/.local/bin/winbridge"
+               << QDir::homePath() + "/.local/share/winbridge/winbridge"
+               << "/usr/local/bin/winbridge" << "/usr/bin/winbridge";
+    for (const QString &candidate : candidates) {
+        QFileInfo info(candidate);
+        if (!info.isFile() || !info.isExecutable()) continue;
+        const QString canonical = info.canonicalFilePath();
+        return canonical.isEmpty() ? info.absoluteFilePath() : canonical;
+    }
+    return {};
+}
 
 class Manager : public QWidget {
     QListWidget *list;
+    QTreeWidget *taskList;
     QLineEdit *search;
-    QLabel *count, *engine, *status, *detailName, *detailText, *badge, *empty, *prefixLabel, *runningCountLabel;
-    QPushButton *removeButton, *refreshButton, *folderButton, *configureButton, *killButton, *aboutButton;
+    QLabel *count, *countTitle, *engine, *status, *detailName, *detailText, *badge, *empty, *prefixLabel, *taskEmpty, *taskCount;
+    QPushButton *removeButton, *refreshButton, *folderButton, *configureButton, *killButton, *aboutButton, *taskKillButton;
     QPushButton *tabAll = nullptr, *tabRunning = nullptr;
-    QString currentFilter = "all";
+    QStackedWidget *mainPages;
     QProgressBar *progress;
     QProcess *process, *pollProcess;
     QTimer *pollTimer;
@@ -40,7 +64,13 @@ class Manager : public QWidget {
     QByteArray output;
     bool busy = false;
     bool screenshot = false;
+    bool demoMode = false;
     QJsonArray programs;
+    QJsonArray tasks;
+    QString selectedTaskId;
+    QString installedSearch, taskSearch;
+    QHash<QString, qint64> previousTaskCpuTicks;
+    QElapsedTimer taskCpuTimer;
     QSet<QString> expandedKeys;
     QPushButton *filesButton, *shortcutButton;
     QFrame *shortcutsPanel;
@@ -100,6 +130,16 @@ class Manager : public QWidget {
             status->setText(T("Could not open the installation folder."));
         }
     }
+    void openLauncher() {
+        const QString token = WinBridge::activationTokenForWindow(windowHandle(), "winbridge");
+        if (WinBridge::activateRunningInstance("launcher", token)) return;
+        const QString executable = launcherExecutablePath(QCoreApplication::applicationFilePath());
+        if (executable.isEmpty()) {
+            QMessageBox::critical(this, T("WinBridge"), T("WinBridge App Launcher could not be found. Install it and try again."));
+        } else if (!QProcess::startDetached(executable, {})) {
+            QMessageBox::critical(this, T("WinBridge"), T("WinBridge App Launcher could not be opened."));
+        }
+    }
     void showProgramMenu(const QPoint &position) {
         auto *item = list->itemAt(position);
         if (!item) return;
@@ -118,6 +158,19 @@ class Manager : public QWidget {
         files->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
         connect(files, &QAction::triggered, this, [this, installPath] { if (!busy) showFiles(installPath); });
         menu->popup(list->viewport()->mapToGlobal(position));
+    }
+    void showTaskMenu(const QPoint &position) {
+        auto *item = taskList->itemAt(position);
+        if (!item) return;
+        taskList->setCurrentItem(item);
+        auto *menu = new QMenu(taskList);
+        menu->setObjectName("taskContextMenu");
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        auto *endTask = menu->addAction(QIcon(":/icons/kill.png"), T("End task"));
+        endTask->setObjectName("contextEndTask");
+        endTask->setEnabled(!busy);
+        connect(endTask, &QAction::triggered, this, [this] { killSelectedTask(); });
+        menu->popup(taskList->viewport()->mapToGlobal(position));
     }
     void updateDetailShortcuts(const QJsonObject &program) {
         auto *layout = shortcutsPanel->layout();
@@ -168,6 +221,7 @@ class Manager : public QWidget {
         filesButton->setEnabled(!busy && !installPath.isEmpty() && QDir(installPath).exists());
         shortcutButton->setEnabled(!busy && !selected["shortcuts"].toArray().isEmpty());
         shortcutsPanel->setEnabled(!busy);
+        if (taskKillButton) taskKillButton->setEnabled(!busy && !selectedTaskId.isEmpty());
     }
     void executeBackend(QProcess *proc, const QStringList &args) {
         if (backend.endsWith(".py")) {
@@ -242,8 +296,98 @@ class Manager : public QWidget {
         executeBackend(p, args);
     }
     void pollRunning() {
-        if (busy || !pollProcess || pollProcess->state() != QProcess::NotRunning || backend.isEmpty() || programs.isEmpty()) return;
-        executeBackend(pollProcess, QStringList{"running"});
+        if (demoMode || busy || !pollProcess || pollProcess->state() != QProcess::NotRunning || backend.isEmpty()) return;
+        executeBackend(pollProcess, QStringList{mainPages && mainPages->currentIndex() == 1 ? "tasks" : "running"});
+    }
+    QString formatMemory(qint64 kb) const {
+        if (kb <= 0) return T("Unavailable");
+        if (kb >= 1024 * 1024) return QString::number(kb / 1024.0 / 1024.0, 'f', 1) + " GB";
+        if (kb >= 1024) return QString::number(kb / 1024.0, 'f', 1) + " MB";
+        return QString::number(kb) + " KB";
+    }
+    int runningProcessCount() const {
+        int processes = 0;
+        for (const auto &value : tasks) processes += value.toObject()["pids"].toArray().size();
+        return processes;
+    }
+    void updateTaskSamples(const QJsonArray &latest, qint64 clockTicks) {
+        const qint64 elapsedMs = taskCpuTimer.isValid() ? taskCpuTimer.elapsed() : 0;
+        const int processors = qMax(1, QThread::idealThreadCount());
+        QHash<QString, qint64> nextTicks;
+        QJsonArray sampled;
+        for (const auto &value : latest) {
+            QJsonObject task = value.toObject();
+            const QString id = task["id"].toString();
+            const qint64 ticks = task["cpu_ticks"].toInteger();
+            double percent = -1.0;
+            if (elapsedMs > 0 && clockTicks > 0 && previousTaskCpuTicks.contains(id)) {
+                const qint64 delta = qMax<qint64>(0, ticks - previousTaskCpuTicks.value(id));
+                percent = (double(delta) * 100000.0) / (double(clockTicks) * double(elapsedMs) * processors);
+            }
+            task["cpu_percent"] = percent;
+            nextTicks[id] = ticks;
+            sampled.append(task);
+        }
+        previousTaskCpuTicks = nextTicks;
+        taskCpuTimer.restart();
+        tasks = sampled;
+    }
+    void renderTasks() {
+        const QString previous = selectedTaskId;
+        selectedTaskId.clear();
+        taskList->clear();
+        qint64 totalMemory = 0;
+        int visibleTasks = 0;
+        for (const auto &value : tasks) {
+            const QJsonObject task = value.toObject();
+            QStringList pids;
+            for (const auto &pid : task["pids"].toArray()) pids << QString::number(pid.toInteger());
+            totalMemory += task["memory_kb"].toInteger();
+            const QString searchable = task["name"].toString() + " " + task["executable"].toString() + " " + pids.join(" ");
+            if (!searchable.contains(taskSearch, Qt::CaseInsensitive)) continue;
+            const double cpu = task["cpu_percent"].toDouble(-1.0);
+            const QString cpuText = cpu < 0.0 ? QString::fromUtf8("—") : QString::number(cpu, 'f', 1) + "%";
+            auto *item = new QTreeWidgetItem(taskList, {task["name"].toString(), task["executable"].toString(),
+                                                       pids.join(", "), formatMemory(task["memory_kb"].toInteger()), cpuText});
+            item->setData(0, Qt::UserRole, task["id"].toString());
+            const QString iconPath = task["icon"].toString();
+            if (!iconPath.isEmpty()) item->setIcon(0, QIcon(iconPath));
+            if (task["id"].toString() == previous) taskList->setCurrentItem(item);
+            visibleTasks++;
+        }
+        taskCount->setText(T("%1 apps · %2").arg(tasks.size()).arg(formatMemory(totalMemory)));
+        if (mainPages && mainPages->currentIndex() == 1) {
+            countTitle->setText(T("RUNNING PROGRAMS"));
+            count->setText(QString::number(runningProcessCount()));
+        }
+        taskEmpty->setText(tasks.isEmpty() ? T("No Windows apps are currently running.") : T("No running programs match your search."));
+        taskEmpty->setVisible(visibleTasks == 0);
+        taskList->setVisible(visibleTasks > 0);
+        if (!taskList->currentItem() && taskList->topLevelItemCount()) taskList->setCurrentItem(taskList->topLevelItem(0));
+        selectedTaskId = taskList->currentItem() ? taskList->currentItem()->data(0, Qt::UserRole).toString() : QString();
+        taskKillButton->setEnabled(!busy && !selectedTaskId.isEmpty());
+    }
+    void killSelectedTask() {
+        auto *item = taskList->currentItem();
+        if (!item || busy) return;
+        const QString id = item->data(0, Qt::UserRole).toString();
+        QMessageBox box(QMessageBox::Question, T("End task"), T("End %1 and all of its processes?").arg(item->text(0)), QMessageBox::NoButton, this);
+        auto *cancel = box.addButton(T("Cancel"), QMessageBox::RejectRole);
+        auto *yes = box.addButton(T("End task"), QMessageBox::AcceptRole);
+        box.setDefaultButton(cancel);
+        box.exec();
+        if (box.clickedButton() != yes) return;
+        setBusy(true);
+        status->setText(T("Ending task …"));
+        auto *p = new QProcess(this);
+        connect(p, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this, p](int code, QProcess::ExitStatus) {
+            const auto doc = QJsonDocument::fromJson(p->readAllStandardOutput());
+            setBusy(false);
+            status->setText(code == 0 && doc.isObject() && doc.object()["killed"].toBool() ? T("Task ended.") : T("Could not end task."));
+            p->deleteLater();
+            pollRunning();
+        });
+        executeBackend(p, {"kill_task", "--key", id});
     }
     void toggleShortcut(const QString &id, const QString &target, bool enabled) {
         status->setText(T("Updating shortcut …"));
@@ -273,21 +417,12 @@ class Manager : public QWidget {
         list->clear();
         selectedKey.clear();
         int visible = 0;
-        int runningCount = 0;
-        for (const auto &value : programs) {
-            if (value.toObject()["running"].toBool()) runningCount++;
-        }
-
-        if (tabAll) tabAll->setText(T("All (%1)").arg(programs.size()));
-        if (tabRunning) tabRunning->setText(T("Active (%1)").arg(runningCount));
-
         for (const auto &value : programs) {
             auto p = value.toObject();
             QString name = p["name"].toString(), key = p["key"].toString();
             bool isRunning = p["running"].toBool();
 
-            if (currentFilter == "running" && !isRunning) continue;
-            if (!name.contains(search->text(), Qt::CaseInsensitive)) continue;
+            if (!name.contains(installedSearch, Qt::CaseInsensitive)) continue;
 
             auto *item = new QListWidgetItem(list);
             item->setData(Qt::UserRole, key);
@@ -337,7 +472,7 @@ class Manager : public QWidget {
             if (key == previous) list->setCurrentItem(item);
             visible++;
         }
-        count->setText(QString::number(programs.size()));
+        if (!mainPages || mainPages->currentIndex() == 0) count->setText(QString::number(programs.size()));
         empty->setVisible(visible == 0);
         empty->setText(programs.isEmpty() ? T("No apps installed yet\n\nOpen an .exe file with WinBridge to get started.\nPortable apps without a registered installation are not listed here.") : T("No apps match your search."));
         list->setVisible(visible > 0);
@@ -420,7 +555,7 @@ protected:
         dialog.exec();
     }
 public:
-    Manager(const QString &backendPath, bool preview = false, bool demo = false) : backend(backendPath), screenshot(preview) {
+    Manager(const QString &backendPath, bool preview = false, bool demo = false) : backend(backendPath), screenshot(preview), demoMode(demo) {
         setWindowTitle("WinBridge Manager");
         setWindowIcon(QIcon(":/assets/winbridge.png"));
         resize(1200, 780);
@@ -434,8 +569,8 @@ public:
         // 1. Top Navigation Bar
         auto *topNav = new QFrame; topNav->setObjectName("topNav");
         auto *navLayout = new QHBoxLayout(topNav);
-        navLayout->setContentsMargins(20, 10, 20, 10);
-        navLayout->setSpacing(14);
+        navLayout->setContentsMargins(16, 10, 16, 10);
+        navLayout->setSpacing(10);
 
         auto *brandLogo = new QLabel;
         brandLogo->setPixmap(QPixmap(":/assets/winbridge.png").scaled(62, 62, Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -450,10 +585,10 @@ public:
 
         navLayout->addSpacing(16);
 
-        // Filter pills (All / Active)
-        tabAll = button(T("All (%1)").arg(0), "filterTab");
+        // Main pages
+        tabAll = button(T("INSTALLED APPS"), "filterTab");
         tabAll->setCheckable(true); tabAll->setChecked(true);
-        tabRunning = button(T("Active (%1)").arg(0), "filterTab");
+        tabRunning = button(T("TASK MANAGER"), "filterTab");
         tabRunning->setCheckable(true);
         navLayout->addWidget(tabAll);
         navLayout->addWidget(tabRunning);
@@ -461,14 +596,31 @@ public:
         connect(tabAll, &QPushButton::clicked, this, [this] {
             tabAll->setChecked(true);
             tabRunning->setChecked(false);
-            currentFilter = "all";
+            taskSearch = search->text();
+            mainPages->setCurrentIndex(0);
+            countTitle->setText(T("INSTALLED APPS"));
+            count->setText(QString::number(programs.size()));
+            search->setPlaceholderText(T("Search for an app …"));
+            {
+                QSignalBlocker blocker(search);
+                search->setText(installedSearch);
+            }
             render();
         });
         connect(tabRunning, &QPushButton::clicked, this, [this] {
             tabRunning->setChecked(true);
             tabAll->setChecked(false);
-            currentFilter = "running";
-            render();
+            installedSearch = search->text();
+            mainPages->setCurrentIndex(1);
+            countTitle->setText(T("RUNNING PROGRAMS"));
+            count->setText(QString::number(runningProcessCount()));
+            search->setPlaceholderText(T("Search running programs …"));
+            {
+                QSignalBlocker blocker(search);
+                search->setText(taskSearch);
+            }
+            renderTasks();
+            pollRunning();
         });
 
         navLayout->addStretch();
@@ -477,7 +629,7 @@ public:
         search->setObjectName("search");
         search->setPlaceholderText(T("Search for an app …"));
         search->setClearButtonEnabled(true);
-        search->setFixedWidth(240);
+        search->setFixedWidth(130);
         navLayout->addWidget(search);
 
         refreshButton = button(QIcon(":/icons/refresh.png"), T("Refresh"));
@@ -495,11 +647,19 @@ public:
 
         windowLayout->addWidget(topNav);
 
-        // 2. Main Content Canvas
-        auto *contentArea = new QVBoxLayout;
-        contentArea->setContentsMargins(24, 18, 24, 16);
+        // 2. Persistent environment summary
+        auto *deckArea = new QVBoxLayout;
+        deckArea->setContentsMargins(24, 18, 24, 0);
+        windowLayout->addLayout(deckArea);
+
+        // 3. Main Content Canvas
+        mainPages = new QStackedWidget;
+        mainPages->setObjectName("mainPages");
+        auto *installedPage = new QWidget;
+        auto *contentArea = new QVBoxLayout(installedPage);
+        contentArea->setContentsMargins(24, 14, 24, 16);
         contentArea->setSpacing(14);
-        windowLayout->addLayout(contentArea, 1);
+        mainPages->addWidget(installedPage);
 
         // Hero System Deck Banner
         auto *heroBanner = new QFrame; heroBanner->setObjectName("heroBanner");
@@ -507,24 +667,32 @@ public:
         heroLayout->setContentsMargins(18, 12, 18, 12);
         heroLayout->setSpacing(16);
 
-        auto makeDeckCard = [&](const QString &eyebrowText, QLabel *valueWidget) {
+        auto makeDeckCard = [&](QLabel *eyebrowWidget, QLabel *valueWidget) {
             auto *card = new QFrame; card->setObjectName("statCard");
             auto *cardLayout = new QVBoxLayout(card);
             cardLayout->setContentsMargins(16, 10, 16, 10);
             cardLayout->setSpacing(3);
-            cardLayout->addWidget(label(eyebrowText, "eyebrow"));
+            cardLayout->addWidget(eyebrowWidget);
             cardLayout->addWidget(valueWidget);
             return card;
         };
 
         count = label("0", "count");
+        countTitle = label(T("INSTALLED APPS"), "eyebrow");
+        countTitle->setProperty("role", "appCountTitle");
         engine = label(T("Loading …"), "engine"); engine->setWordWrap(true);
         prefixLabel = label("~/.local/share/winbridge/shared", "envPath"); prefixLabel->setWordWrap(true);
 
-        heroLayout->addWidget(makeDeckCard(T("INSTALLED APPS"), count), 1);
-        heroLayout->addWidget(makeDeckCard(T("PROTON VERSION"), engine), 2);
-        heroLayout->addWidget(makeDeckCard(T("ENVIRONMENT"), prefixLabel), 2);
-        contentArea->addWidget(heroBanner);
+        heroLayout->addWidget(makeDeckCard(countTitle, count), 1);
+        heroLayout->addWidget(makeDeckCard(label(T("PROTON VERSION"), "eyebrow"), engine), 2);
+        heroLayout->addWidget(makeDeckCard(label(T("ENVIRONMENT"), "eyebrow"), prefixLabel), 2);
+        auto *runAppButton = button(QIcon(":/assets/launcher.png"), T("Run App"), "runAppButton");
+        runAppButton->setIconSize(QSize(28, 28));
+        runAppButton->setMinimumWidth(120);
+        runAppButton->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+        runAppButton->setToolTip(T("Open the WinBridge EXE App Launcher"));
+        heroLayout->addWidget(runAppButton);
+        deckArea->addWidget(heroBanner);
 
         // Main Body Split (Library on left, Detail on right)
         auto *body = new QHBoxLayout; body->setSpacing(18);
@@ -582,6 +750,50 @@ public:
         status = label(T("Ready"), "statusBar"); status->setWordWrap(true);
         contentArea->addWidget(status);
 
+        auto *taskPage = new QWidget;
+        auto *taskLayout = new QVBoxLayout(taskPage);
+        taskLayout->setContentsMargins(24, 14, 24, 18);
+        taskLayout->setSpacing(12);
+        auto *taskHeader = new QHBoxLayout;
+        taskHeader->addWidget(label(T("Windows programs currently running in the shared WinBridge environment."), "muted"), 1);
+        taskCount = label(T("0 apps · 0 KB"), "taskSummary");
+        taskHeader->addWidget(taskCount);
+        taskLayout->addLayout(taskHeader);
+        taskList = new QTreeWidget;
+        taskList->setObjectName("taskList");
+        taskList->setColumnCount(5);
+        taskList->setHeaderLabels({T("Application"), T("Executable"), T("PIDs"), T("Memory"), T("CPU")});
+        taskList->setRootIsDecorated(false);
+        taskList->setAlternatingRowColors(true);
+        taskList->setIconSize(QSize(28, 28));
+        taskList->setContextMenuPolicy(Qt::CustomContextMenu);
+        taskList->header()->setSectionsMovable(false);
+        taskList->header()->setStretchLastSection(false);
+        taskList->header()->setMinimumSectionSize(45);
+        taskList->header()->setSectionResizeMode(QHeaderView::Interactive);
+        const QVariantList savedTaskWidths = QSettings("WinBridge", "Manager").value("taskManagerColumnWidthsV3").toList();
+        const QList<int> defaultTaskWidths{180, 540, 140, 120, 90};
+        for (int column = 0; column < taskList->columnCount(); ++column)
+            taskList->setColumnWidth(column, column < savedTaskWidths.size() ? savedTaskWidths[column].toInt() : defaultTaskWidths[column]);
+        connect(taskList->header(), &QHeaderView::sectionResized, this, [this] {
+            QVariantList widths;
+            for (int column = 0; column < taskList->columnCount(); ++column) widths << taskList->columnWidth(column);
+            QSettings("WinBridge", "Manager").setValue("taskManagerColumnWidthsV3", widths);
+        });
+        taskLayout->addWidget(taskList, 1);
+        taskEmpty = label(T("No Windows apps are currently running."), "muted");
+        taskEmpty->setAlignment(Qt::AlignCenter);
+        taskLayout->addWidget(taskEmpty, 1);
+        auto *taskActions = new QHBoxLayout;
+        taskActions->addWidget(label(T("The list refreshes automatically every 3 seconds."), "muted"));
+        taskActions->addStretch();
+        taskKillButton = button(QIcon(":/icons/kill.png"), T("End task"), "endTaskButton");
+        taskKillButton->setEnabled(false);
+        taskActions->addWidget(taskKillButton);
+        taskLayout->addLayout(taskActions);
+        mainPages->addWidget(taskPage);
+        windowLayout->addWidget(mainPages, 1);
+
         process = new QProcess(this);
         connect(process, &QProcess::readyReadStandardOutput, this, [this] { output += process->readAllStandardOutput(); });
         connect(process, &QProcess::readyReadStandardError, this, [this] { process->readAllStandardError(); });
@@ -592,12 +804,21 @@ public:
                 status->setText(T("Could not start the WinBridge integration: ") + process->errorString());
             }
         });
-        connect(search, &QLineEdit::textChanged, this, [this] { render(); });
+        connect(search, &QLineEdit::textChanged, this, [this](const QString &text) {
+            if (mainPages->currentIndex() == 1) {
+                taskSearch = text;
+                renderTasks();
+            } else {
+                installedSearch = text;
+                render();
+            }
+        });
         connect(list, &QListWidget::currentItemChanged, this, [this] { updateSelection(); });
-        connect(refreshButton, &QPushButton::clicked, this, [this] { request("list"); });
+        connect(refreshButton, &QPushButton::clicked, this, [this] { if (mainPages->currentIndex() == 1) pollRunning(); else request("list"); });
         connect(folderButton, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl::fromLocalFile(prefix + "/pfx/drive_c")); });
         connect(configureButton, &QPushButton::clicked, this, [this] { showSettings(); });
         connect(aboutButton, &QPushButton::clicked, this, [this] { showAbout(); });
+        connect(runAppButton, &QPushButton::clicked, this, [this] { openLauncher(); });
         connect(killButton, &QPushButton::clicked, this, [this] {
             if (selectedKey.isEmpty() || busy) return;
             confirmAndKill(selectedKey, detailName->text());
@@ -615,12 +836,23 @@ public:
             if (selectedKey.isEmpty() || busy) return;
             confirmAndUninstall(selectedKey, detailName->text());
         });
+        connect(taskList, &QTreeWidget::currentItemChanged, this, [this] {
+            selectedTaskId = taskList->currentItem() ? taskList->currentItem()->data(0, Qt::UserRole).toString() : QString();
+            taskKillButton->setEnabled(!busy && !selectedTaskId.isEmpty());
+        });
+        connect(taskList, &QTreeWidget::customContextMenuRequested, this, &Manager::showTaskMenu);
+        connect(taskKillButton, &QPushButton::clicked, this, [this] { killSelectedTask(); });
 
         pollProcess = new QProcess(this);
         connect(pollProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this](int code, QProcess::ExitStatus) {
             if (code == 0 && !busy) {
                 auto doc = QJsonDocument::fromJson(pollProcess->readAllStandardOutput());
                 if (doc.isObject()) {
+                    if (doc.object().contains("tasks")) {
+                        updateTaskSamples(doc.object()["tasks"].toArray(), doc.object()["clock_ticks"].toInteger());
+                        renderTasks();
+                        return;
+                    }
                     auto runningMap = doc.object()["running"].toObject();
                     bool changed = false;
                     for (int i = 0; i < programs.size(); ++i) {
@@ -677,7 +909,12 @@ public:
                 }
             };
             expandedKeys.insert("notepad-plus-plus");
+            tasks = {
+                QJsonObject{{"id", "notepad"}, {"name", "notepad++.exe"}, {"executable", "C:\\Program Files\\Notepad++\\notepad++.exe"}, {"pids", QJsonArray{14201}}, {"memory_kb", 98240}, {"cpu_percent", 1.4}},
+                QJsonObject{{"id", "portable"}, {"name", "paintdotnet.exe"}, {"executable", "C:\\Users\\steamuser\\Downloads\\paintdotnet.exe"}, {"pids", QJsonArray{14322, 14328}}, {"memory_kb", 241664}, {"cpu_percent", 7.8}}
+            };
             render();
+            renderTasks();
             if (list->count() > 0) {
                 list->setCurrentRow(0);
             }
@@ -694,7 +931,9 @@ int main(int argc, char **argv) {
     QApplication app(argc,argv);
     app.setWindowIcon(QIcon(":/assets/winbridge.png"));
     app.setApplicationName("WinBridge Manager"); app.setDesktopFileName("winbridge-manager");
-    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.addOption({"demo","Populate with demo data for preview"});parser.addOption({"snapshot","Render a live library snapshot and exit","path"});parser.addOption({"theme","Theme to use: classic or dark","theme"});parser.addOption({"lang","Language to use: en-US or no-NB","lang"});parser.process(app);
+    QCommandLineParser parser;parser.addHelpOption();parser.addOption({"backend","Path to the WinBridge integration module","path"});parser.addOption({"screenshot","Render an empty-state preview and exit","path"});parser.addOption({"demo","Populate with demo data for preview"});parser.addOption({"task-manager","Open the Task Manager page"});parser.addOption({"snapshot","Render a live library snapshot and exit","path"});parser.addOption({"theme","Theme to use: classic or dark","theme"});parser.addOption({"lang","Language to use: en-US or no-NB","lang"});parser.process(app);
+    const bool previewMode = parser.isSet("screenshot") || parser.isSet("snapshot") || parser.isSet("demo");
+    if (!previewMode && WinBridge::activateRunningInstance("manager", qEnvironmentVariable("XDG_ACTIVATION_TOKEN"))) return 0;
     QString backend=parser.value("backend");
     if(parser.isSet("theme")) {
         QSettings("WinBridge", "Manager").setValue("theme", parser.value("theme"));
@@ -721,6 +960,14 @@ int main(int argc, char **argv) {
     QString lang = parser.isSet("lang") ? parser.value("lang") : QSettings("WinBridge", "Manager").value("language", "en-US").toString();
     I18n::load(lang);
     Manager window(backend,parser.isSet("screenshot"),parser.isSet("demo"));window.show();
+    WinBridge::InstanceActivationServer activationServer("manager", [&window](const QString &token) {
+        WinBridge::bringWindowToForeground(&window, token);
+    });
+    if (!previewMode) activationServer.start();
+    if(parser.isSet("task-manager")) {
+        for (auto *candidate : window.findChildren<QPushButton*>("filterTab"))
+            if (candidate->text() == T("TASK MANAGER")) { candidate->click(); break; }
+    }
     if(parser.isSet("screenshot"))QTimer::singleShot(500,&app,[&]{bool ok=window.grab().save(parser.value("screenshot"));app.exit(ok?0:1);});
     else if(parser.isSet("snapshot"))QTimer::singleShot(2200,&app,[&]{
         if (auto *lw = window.findChild<QListWidget*>()) {

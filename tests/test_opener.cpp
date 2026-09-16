@@ -7,6 +7,7 @@
 #include <QtTest>
 #include <QtWidgets>
 #include "opener.h"
+#include "single_instance.h"
 
 using namespace WinBridge;
 
@@ -14,6 +15,14 @@ class OpenerTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void activationChannelReusesRunningWindow() {
+        const QString id = "test-" + QUuid::createUuid().toString(QUuid::Id128).left(8);
+        bool activated = false;
+        InstanceActivationServer server(id, [&](const QString &) { activated = true; });
+        if (!server.start()) QSKIP("Local sockets are unavailable in this sandbox.");
+        QVERIFY(activateRunningInstance(id));
+        QTRY_VERIFY_WITH_TIMEOUT(activated, 2000);
+    }
     void recentAppsAreUniqueNewestFirstAndDiscardMissingFiles() {
         QTemporaryDir tmp;
         const QString storage = tmp.filePath("config/recent.json");
@@ -32,11 +41,26 @@ private slots:
         QCOMPARE(recentExecutables(storage), QStringList({second}));
     }
 
+    void managerIsFoundBesideLauncher() {
+        QTemporaryDir tmp;
+        const QString launcher = tmp.filePath("winbridge");
+        const QString manager = tmp.filePath("winbridge-manager");
+        for (const QString &path : {launcher, manager}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("#!/bin/sh\n");
+            file.close();
+            QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        }
+        QCOMPARE(managerExecutablePath(launcher), manager);
+    }
+
     void launcherWindowExposesFileRecentAndShortcutControls() {
         bool foundPath = false;
         bool foundRecents = false;
         bool foundShortcutMenu = false;
         bool foundOpen = false;
+        bool foundManager = false;
         QTimer::singleShot(0, this, [&] {
             auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
             QVERIFY(dialog);
@@ -45,6 +69,8 @@ private slots:
             auto *shortcut = dialog->findChild<QPushButton *>("shortcutButton");
             foundShortcutMenu = shortcut && shortcut->menu() && shortcut->menu()->actions().size() == 2;
             foundOpen = dialog->findChild<QPushButton *>("primary") != nullptr;
+            auto *manager = dialog->findChild<QPushButton *>("managerButton");
+            foundManager = manager && !manager->icon().isNull();
             dialog->reject();
         });
         const OpenRequest request = showExecutableOpener("/usr/bin/winbridge");
@@ -53,6 +79,7 @@ private slots:
         QVERIFY(foundRecents);
         QVERIFY(foundShortcutMenu);
         QVERIFY(foundOpen);
+        QVERIFY(foundManager);
     }
 
     void launcherWindowCanRenderScreenshot() {

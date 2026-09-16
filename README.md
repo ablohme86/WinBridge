@@ -11,7 +11,7 @@ WinBridge lets you open Windows `.exe` files from your Linux desktop using Proto
 
 ## WinBridge app launcher
 
-Open **WinBridge** without an `.exe` argument to launch Windows apps from one native window. Enter a path directly, browse for an `.exe` or `.lnk` file, or select one of the 12 most recently opened apps. Missing files are removed from the list automatically.
+Open **WinBridge** without an `.exe` argument to launch Windows apps from one native window. Enter a path directly, browse for an `.exe` or `.lnk` file, or select one of the 12 most recently opened apps. Missing files are removed from the list automatically. The button in the top-right corner opens **WinBridge Manager** directly. If Manager is already running, its existing window is brought to the foreground.
 
 Once an app is selected, **Make Shortcut** can add it directly to the Linux Desktop or Start Menu. This also works for portable apps and installers that do not export their own shortcuts. WinBridge extracts the app's original Windows icon for the recent list and generated shortcuts, falling back to the WinBridge icon when an executable has no readable icon. The launcher uses the theme selected in WinBridge Manager.
 
@@ -37,16 +37,22 @@ By default, WinBridge reuses one shared Wine/Proton environment (a "prefix") for
 Open **WinBridge Manager** from your application menu to browse and manage your Windows programs.
 
 - **Program library and search:** Browse registered programs with their icons and quickly filter the list.
+- **Run an app:** Use the persistent **Run App** button to open the WinBridge EXE App Launcher from either Manager tab. If the launcher is already running, WinBridge activates its existing window instead of opening another copy.
 - **Program actions:** Select a program to manage its shortcuts, show its files, stop it, or uninstall it in the detail panel. Right-click a program for **Uninstall** and **Show files**. Opening files requires a registered installation folder that still exists.
 - **Uninstall programs:** Launch a program's Windows uninstaller and automatically clean up its shortcuts and icons afterward.
 - **Control shortcuts:** Enable or disable desktop and application menu entries independently for each app.
 - **Manage running apps:** See which programs are running and stop frozen processes with **Kill app**.
+- **Task Manager:** Switch to the **TASK MANAGER** tab to see every active Windows program in the shared environment, including portable apps. The persistent search box filters running programs by name, executable path or PID and keeps a separate query for each tab. It shows the executable path, process IDs, memory use and live CPU activity, refreshes automatically, and can end the selected app and all of its processes from the button or right-click menu. Drag any column divider to resize it; WinBridge remembers the column widths. WinBridge uses the original icon embedded in the executable when one is available.
 - **Browse Windows files:** Open the shared **C:** drive in your desktop file manager.
 - **Customize your setup:** Choose a Proton version, the Windows environment location, and English or Norwegian Bokmål in Settings.
 
 ## A familiar retro desktop
 
 The Manager offers two Windows 9x-inspired themes: **Classic Light (Windows 98)** and **Retro Dark (Plus! Mystery)**, with live previews in Settings.
+
+| Task Manager · Classic Light | Task Manager · Retro Dark |
+| --- | --- |
+| ![WinBridge Task Manager in Classic Light](assets/winbridge-task-manager.png) | ![WinBridge Task Manager in Retro Dark](assets/winbridge-task-manager-dark.png) |
 
 </details>
 

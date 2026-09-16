@@ -20,8 +20,10 @@
 #include "shared_space.h"
 #include "shortcuts.h"
 #include "launcher.h"
+#include "executable_icon.h"
 
 #include <QDir>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -65,7 +67,144 @@ struct ProcessDetail {
     qint64 ppid = 0;
     QStringList cmdline;
     QMap<QString, QString> env;
+    qint64 rssKb = 0;
+    qint64 cpuTicks = 0;
 };
+
+static QMap<qint64, ProcessDetail> prefixProcesses(const QString &prefix, const QString &procRoot) {
+    const QString pfx = QDir::cleanPath(prefix);
+    const QString winePfx = pfx + "/pfx";
+    QMap<qint64, ProcessDetail> result;
+    QDir procDir(procRoot);
+    if (!procDir.exists()) return result;
+    for (const QString &pidStr : procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        bool ok = false;
+        const qint64 pid = pidStr.toLongLong(&ok);
+        if (!ok) continue;
+        const QString pDir = procDir.filePath(pidStr);
+        ProcessDetail detail;
+        detail.pid = pid;
+        QFile statusFile(pDir + "/status");
+        if (statusFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            while (!statusFile.atEnd()) {
+                const QString line = QString::fromUtf8(statusFile.readLine());
+                if (line.startsWith("PPid:")) detail.ppid = line.mid(5).trimmed().toLongLong();
+                else if (line.startsWith("VmRSS:")) {
+                    static const QRegularExpression rssPattern(R"(^VmRSS:\s*(\d+)\s*kB)", QRegularExpression::CaseInsensitiveOption);
+                    const auto match = rssPattern.match(line);
+                    if (match.hasMatch()) detail.rssKb = match.captured(1).toLongLong();
+                }
+            }
+        }
+        // Some kernels and process states omit VmRSS from status. statm's
+        // resident-page count provides the same measurement as a fallback.
+        if (detail.rssKb <= 0) {
+            QFile statmFile(pDir + "/statm");
+            if (statmFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                const QList<QByteArray> fields = statmFile.readAll().simplified().split(' ');
+                bool residentOk = false;
+                const qint64 residentPages = fields.size() > 1 ? fields[1].toLongLong(&residentOk) : 0;
+                const long pageSize = ::sysconf(_SC_PAGESIZE);
+                if (residentOk && residentPages > 0 && pageSize > 0)
+                    detail.rssKb = residentPages * (pageSize / 1024);
+            }
+        }
+        QFile statFile(pDir + "/stat");
+        if (statFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QByteArray stat = statFile.readAll().trimmed();
+            const int commandEnd = stat.lastIndexOf(')');
+            if (commandEnd >= 0) {
+                const QList<QByteArray> fields = stat.mid(commandEnd + 1).trimmed().split(' ');
+                if (fields.size() > 12)
+                    detail.cpuTicks = fields[11].toLongLong() + fields[12].toLongLong();
+            }
+        }
+        QFile envFile(pDir + "/environ");
+        if (envFile.open(QIODevice::ReadOnly)) {
+            for (const QByteArray &pair : envFile.readAll().split('\0')) {
+                const int eq = pair.indexOf('=');
+                if (eq > 0) detail.env[QString::fromUtf8(pair.left(eq))] = QString::fromUtf8(pair.mid(eq + 1));
+            }
+        }
+        const QString dataPath = detail.env.value("STEAM_COMPAT_DATA_PATH");
+        const QString envWinePfx = detail.env.value("WINEPREFIX");
+        if ((dataPath.isEmpty() || QDir::cleanPath(dataPath) != pfx) &&
+            (envWinePfx.isEmpty() || QDir::cleanPath(envWinePfx) != winePfx)) continue;
+        QFile cmdFile(pDir + "/cmdline");
+        if (cmdFile.open(QIODevice::ReadOnly)) {
+            for (const QByteArray &part : cmdFile.readAll().split('\0'))
+                if (!part.isEmpty()) detail.cmdline << QString::fromUtf8(part);
+        }
+        result[pid] = detail;
+    }
+    return result;
+}
+
+static QString taskExecutable(const QStringList &cmdline) {
+    for (QString arg : cmdline) {
+        arg = arg.trimmed();
+        if (arg.startsWith('"') && arg.endsWith('"')) arg = arg.mid(1, arg.size() - 2);
+        if (arg.endsWith(".exe", Qt::CaseInsensitive)) return arg;
+    }
+    return {};
+}
+
+static QString hostExecutablePath(const QString &prefix, QString executable) {
+    executable.replace('\\', '/');
+    if (executable.startsWith("C:/", Qt::CaseInsensitive))
+        return QDir::cleanPath(prefix + "/pfx/drive_c/" + executable.mid(3));
+    if (executable.startsWith("Z:/", Qt::CaseInsensitive))
+        return QDir::cleanPath("/" + executable.mid(3));
+    return QFileInfo(executable).isAbsolute() ? QDir::cleanPath(executable) : QString();
+}
+
+QJsonArray getRunningTasks(const QString &prefix, const QString &procRoot) {
+    struct Task { QString id, name, executable, icon; QList<qint64> pids; qint64 memoryKb = 0; qint64 cpuTicks = 0; };
+    QMap<QString, Task> grouped;
+    const auto processes = prefixProcesses(prefix, procRoot);
+    for (auto it = processes.constBegin(); it != processes.constEnd(); ++it) {
+        const QString executable = taskExecutable(it->cmdline);
+        if (executable.isEmpty()) continue;
+        const QString name = QFileInfo(QString(executable).replace('\\', '/')).fileName();
+        if (SYSTEM_PROCESSES.contains(name.toLower())) continue;
+        const QString normalized = executable.toLower().replace('\\', '/');
+        const QString id = QString::fromLatin1(QCryptographicHash::hash(normalized.toUtf8(), QCryptographicHash::Sha256).toHex().left(20));
+        Task &task = grouped[id];
+        task.id = id;
+        task.name = name;
+        task.executable = executable;
+        task.pids.append(it.key());
+        task.memoryKb += it->rssKb;
+        task.cpuTicks += it->cpuTicks;
+    }
+    QJsonArray tasks;
+    QList<Task> sorted = grouped.values();
+    std::sort(sorted.begin(), sorted.end(), [](const Task &a, const Task &b) { return a.name.toLower() < b.name.toLower(); });
+    for (Task &task : sorted) {
+        std::sort(task.pids.begin(), task.pids.end());
+        const QString hostPath = hostExecutablePath(prefix, task.executable);
+        if (!hostPath.isEmpty() && QFileInfo::exists(hostPath)) task.icon = executableIconPath(hostPath);
+        QJsonArray pids;
+        for (qint64 pid : task.pids) pids.append(pid);
+        tasks.append(QJsonObject{{"id", task.id}, {"name", task.name}, {"executable", task.executable},
+                                 {"icon", task.icon}, {"pids", pids}, {"process_count", task.pids.size()},
+                                 {"memory_kb", task.memoryKb}, {"cpu_ticks", task.cpuTicks}});
+    }
+    return tasks;
+}
+
+QJsonObject killTask(const QString &prefix, const QString &taskId, const QString &procRoot) {
+    for (const auto &value : getRunningTasks(prefix, procRoot)) {
+        const QJsonObject task = value.toObject();
+        if (task.value("id").toString() != taskId) continue;
+        const QJsonArray pids = task.value("pids").toArray();
+        for (const auto &pid : pids) ::kill(pid.toInteger(), SIGTERM);
+        QThread::msleep(100);
+        for (const auto &pid : pids) ::kill(pid.toInteger(), SIGKILL);
+        return QJsonObject{{"killed", true}, {"id", taskId}, {"pids", pids}};
+    }
+    return QJsonObject{{"killed", false}, {"id", taskId}, {"error", "Task is not running."}};
+}
 
 QMap<QString, QList<qint64>> getRunningApps(
     const QString &prefix,
@@ -476,6 +615,15 @@ QJsonObject operate(
         QJsonObject ret;
         ret["running"] = runObj;
         return ret;
+    }
+
+    if (action == "tasks") {
+        return QJsonObject{{"tasks", getRunningTasks(prefix)}, {"clock_ticks", qint64(::sysconf(_SC_CLK_TCK))}};
+    }
+
+    if (action == "kill_task") {
+        if (key.isEmpty()) throw std::runtime_error("Task ID is required.");
+        return killTask(prefix, key);
     }
 
     if (action == "kill") {

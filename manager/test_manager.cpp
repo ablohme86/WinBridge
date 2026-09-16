@@ -243,6 +243,8 @@ print(json.dumps(data))
         QVERIFY(recorded.contains("toggle_shortcut"));
         QVERIFY(recorded.contains("--id sc1"));
         QVERIFY(recorded.contains("--desktop 0"));
+        auto *status = window.findChild<QLabel*>("statusBar");
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(), QString("Shortcut updated."), 5000);
     }
     void detectRunningAndKillButton() {
         QTemporaryDir dir;
@@ -365,11 +367,95 @@ print(json.dumps(data))
         auto *danger = window.findChild<QPushButton*>("danger");
         auto *kill = window.findChild<QPushButton*>("killAppButton");
         auto *about = window.findChild<QPushButton*>("aboutButton");
+        auto *runApp = window.findChild<QPushButton*>("runAppButton");
         QVERIFY(files && !files->icon().isNull());
         QVERIFY(shortcut && !shortcut->icon().isNull());
         QVERIFY(danger && !danger->icon().isNull());
         QVERIFY(kill && !kill->icon().isNull());
         QVERIFY(about && !about->icon().isNull());
+        QVERIFY(runApp && !runApp->icon().isNull());
+        QCOMPARE(runApp->text(), QString("Run App"));
+    }
+    void resolvesSiblingAppLauncher() {
+        QTemporaryDir dir;
+        QString manager = dir.filePath("bin/winbridge-manager");
+        QString launcher = dir.filePath("bin/winbridge");
+        QVERIFY(QDir().mkpath(dir.filePath("bin")));
+        QFile managerFile(manager); QVERIFY(managerFile.open(QIODevice::WriteOnly)); managerFile.close();
+        QFile launcherFile(launcher); QVERIFY(launcherFile.open(QIODevice::WriteOnly)); launcherFile.close();
+        QVERIFY(launcherFile.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QCOMPARE(launcherExecutablePath(manager), launcher);
+    }
+    void taskManagerListsPortableAppsAndEndsTask() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
+        QFile file(script); QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write((R"PY(import json,sys
+from pathlib import Path
+p=Path(r')PY" + calls + R"PY(')
+action=sys.argv[1]
+p.write_text((p.read_text() if p.exists() else '') + ' '.join(sys.argv[1:]) + '\n')
+if action == 'tasks':
+ print(json.dumps({'clock_ticks':100,'tasks':[{'id':'portable-id','name':'Portable Paint.exe','executable':r'C:\\Users\\steamuser\\Downloads\\Portable Paint.exe','pids':[4455,4456],'memory_kb':131072,'cpu_ticks':250}]}))
+elif action == 'kill_task': print(json.dumps({'killed':True}))
+elif action == 'running': print(json.dumps({'running':{}}))
+else: print(json.dumps({'prefix':'/tmp/test','proton':'Test','ready':True,'programs':[]}))
+)PY").toUtf8());
+        file.close();
+        Manager window(script); window.show();
+        QPushButton *taskTab = nullptr;
+        for (auto *candidate : window.findChildren<QPushButton*>())
+            if (candidate->text() == "TASK MANAGER") taskTab = candidate;
+        QVERIFY(taskTab);
+        taskTab->click();
+        auto *tree = window.findChild<QTreeWidget*>("taskList");
+        QTRY_COMPARE_WITH_TIMEOUT(tree->topLevelItemCount(), 1, 5000);
+        auto *countTitle = window.findChild<QLabel*>("eyebrow", {Qt::FindChildrenRecursively});
+        for (auto *candidate : window.findChildren<QLabel*>("eyebrow"))
+            if (candidate->property("role").toString() == "appCountTitle") countTitle = candidate;
+        QVERIFY(countTitle);
+        QCOMPARE(countTitle->text(), QString("RUNNING PROGRAMS"));
+        QCOMPARE(window.findChild<QLabel*>("count")->text(), QString("2"));
+        QCOMPARE(tree->columnCount(), 5);
+        QCOMPARE(tree->headerItem()->text(4), QString("CPU"));
+        QCOMPARE(tree->header()->sectionResizeMode(2), QHeaderView::Interactive);
+        tree->setColumnWidth(2, 75);
+        QCOMPARE(tree->columnWidth(2), 75);
+        QTest::qWait(100);
+        QPushButton *refresh = nullptr;
+        for (auto *candidate : window.findChildren<QPushButton*>())
+            if (candidate->text() == "Refresh") refresh = candidate;
+        QVERIFY(refresh);
+        refresh->click();
+        QTRY_COMPARE_WITH_TIMEOUT(tree->topLevelItem(0)->text(4), QString("0.0%"), 5000);
+        QCOMPARE(tree->topLevelItem(0)->text(0), QString("Portable Paint.exe"));
+        QCOMPARE(tree->topLevelItem(0)->text(2), QString("4455, 4456"));
+        auto *taskSearch = window.findChild<QLineEdit*>("search");
+        QVERIFY(taskSearch && taskSearch->isVisible());
+        QCOMPARE(taskSearch->placeholderText(), QString("Search running programs …"));
+        taskSearch->setText("4456");
+        QCOMPARE(tree->topLevelItemCount(), 1);
+        taskSearch->setText("not-running");
+        QCOMPARE(tree->topLevelItemCount(), 0);
+        taskSearch->clear();
+        QCOMPARE(tree->topLevelItemCount(), 1);
+        QPoint position = tree->visualItemRect(tree->topLevelItem(0)).center();
+        QContextMenuEvent contextEvent(QContextMenuEvent::Mouse, position, tree->viewport()->mapToGlobal(position));
+        QApplication::sendEvent(tree->viewport(), &contextEvent);
+        auto *contextMenu = window.findChild<QMenu*>("taskContextMenu");
+        QVERIFY(contextMenu);
+        auto *contextEnd = contextMenu->findChild<QAction*>("contextEndTask");
+        QVERIFY(contextEnd && contextEnd->isEnabled());
+        QCOMPARE(tree->currentItem()->data(0, Qt::UserRole).toString(), QString("portable-id"));
+        contextMenu->close();
+        auto *end = window.findChild<QPushButton*>("endTaskButton");
+        QVERIFY(end && end->isEnabled());
+        QTimer::singleShot(20, [] {
+            if (auto *box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+                for (auto *b : box->buttons()) if (box->buttonRole(b) == QMessageBox::AcceptRole) { b->click(); break; }
+        });
+        end->click();
+        QTRY_VERIFY_WITH_TIMEOUT([&] { QFile f(calls); return f.open(QIODevice::ReadOnly) && f.readAll().contains("kill_task --key portable-id"); }(), 5000);
     }
 };
 QTEST_MAIN(ManagerTest)

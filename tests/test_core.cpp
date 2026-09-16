@@ -17,6 +17,7 @@
 */
 
 #include <QtTest>
+#include <unistd.h>
 #include <QBuffer>
 #include <QImage>
 #include "executable_icon.h"
@@ -186,6 +187,25 @@ private slots:
         QTest::newRow("shortcut") << "lnk" << "run";
         QTest::newRow("uninstaller-query") << "exe" << "runinprefix";
     }
+    void externallyTerminatedLaunchDoesNotShowAsFailure() {
+        QTemporaryDir tmp;
+        ScopedEnvironment env;
+        for (const auto &key : {"HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "PATH"})
+            env.set(key, tmp.path().toUtf8());
+        QString engine = tmp.filePath("Engine");
+        QVERIFY(QDir().mkpath(engine));
+        QFile proton(engine + "/proton"); QVERIFY(proton.open(QIODevice::WriteOnly)); proton.close();
+        QFile runner(tmp.filePath("umu-run")); QVERIFY(runner.open(QIODevice::WriteOnly));
+        runner.write("#!/bin/sh\nexit 15\n"); runner.close();
+        QVERIFY(runner.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QString target = tmp.filePath("app.exe");
+        QFile app(target); QVERIFY(app.open(QIODevice::WriteOnly)); app.close();
+        QCOMPARE(launch(target, engine, {}, {}, {}, tmp.filePath("prefix"), false), 15);
+
+        QVERIFY(runner.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        runner.write("#!/bin/sh\nexit 7\n"); runner.close();
+        QVERIFY_EXCEPTION_THROWN(launch(target, engine, {}, {}, {}, tmp.filePath("prefix"), false), std::runtime_error);
+    }
     void umuLaunchPreservesPrefixAndArguments() {
         QFETCH(QString, suffix);
         QFETCH(QString, verb);
@@ -345,7 +365,7 @@ engine.mkdir(parents=True, exist_ok=True)
 
         QFile s1000(procRoot + "/1000/status");
         QVERIFY(s1000.open(QIODevice::WriteOnly));
-        s1000.write("PPid:\t1\n");
+        s1000.write("PPid:\t1\nVmRSS:\t65536 kB\n");
         s1000.close();
 
         QFile e1000(procRoot + "/1000/environ");
@@ -361,12 +381,20 @@ engine.mkdir(parents=True, exist_ok=True)
         cmdData.append('\0');
         c1000.write(cmdData);
         c1000.close();
+        QFile cpu1000(procRoot + "/1000/stat");
+        QVERIFY(cpu1000.open(QIODevice::WriteOnly));
+        cpu1000.write("1000 (sc3u.exe) S 1 0 0 0 0 0 0 0 0 0 120 30 0 0 0 0 0\n");
+        cpu1000.close();
 
         // 1001 is child of 1000
         QFile s1001(procRoot + "/1001/status");
         QVERIFY(s1001.open(QIODevice::WriteOnly));
         s1001.write("PPid:\t1000\n");
         s1001.close();
+        QFile m1001(procRoot + "/1001/statm");
+        QVERIFY(m1001.open(QIODevice::WriteOnly));
+        m1001.write("1000 32 10 0 0 0 0\n");
+        m1001.close();
 
         QFile e1001(procRoot + "/1001/environ");
         QVERIFY(e1001.open(QIODevice::WriteOnly));
@@ -388,6 +416,14 @@ engine.mkdir(parents=True, exist_ok=True)
         progs.append(progObj);
 
         auto running = getRunningApps(pfx, progs, procRoot);
+        auto tasks = getRunningTasks(pfx, procRoot);
+        QCOMPARE(tasks.size(), 2);
+        QCOMPARE(tasks[0].toObject()["name"].toString(), QString("helper.exe"));
+        QCOMPARE(tasks[0].toObject()["memory_kb"].toInteger(), qint64(32 * (::sysconf(_SC_PAGESIZE) / 1024)));
+        QCOMPARE(tasks[1].toObject()["name"].toString(), QString("sc3u.exe"));
+        QCOMPARE(tasks[1].toObject()["memory_kb"].toInteger(), qint64(65536));
+        QCOMPARE(tasks[1].toObject()["cpu_ticks"].toInteger(), qint64(150));
+        QCOMPARE(tasks[1].toObject()["pids"].toArray()[0].toInteger(), qint64(1000));
         QVERIFY(running.contains("sc_key"));
         QCOMPARE(running["sc_key"].size(), 2);
         QCOMPARE(running["sc_key"][0], qint64(1000));

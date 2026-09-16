@@ -31,6 +31,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <iostream>
+#include <signal.h>
 #include <stdexcept>
 
 namespace WinBridge {
@@ -420,7 +421,13 @@ int launch(
 
     logFile.close();
 
-    if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+    // Task Manager stops Windows processes with SIGTERM and, if necessary,
+    // SIGKILL. Proton/UMU forwards those signal numbers as its exit code. This
+    // is an intentional close and must not be presented as an application
+    // failure by the launcher that is waiting for Proton to finish.
+    const bool externallyTerminated = proc.exitCode() == SIGTERM || proc.exitCode() == SIGKILL ||
+                                      proc.exitCode() == 128 + SIGTERM || proc.exitCode() == 128 + SIGKILL;
+    if ((proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) && !externallyTerminated) {
         if (!capture) {
             throw std::runtime_error(QString("Programmet avsluttet med feilkode %1.\nLogg: %2")
                 .arg(proc.exitCode()).arg(logfilePath).toStdString());

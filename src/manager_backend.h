@@ -42,6 +42,17 @@ QJsonObject killProgram(
     const QString &procRoot = "/proc"
 );
 
+QJsonArray getRunningTasks(
+    const QString &prefix,
+    const QString &procRoot = "/proc"
+);
+
+QJsonObject killTask(
+    const QString &prefix,
+    const QString &taskId,
+    const QString &procRoot = "/proc"
+);
+
 QMap<QString, QString> programIcons(const QString &prefix);
 QString programInstallDirectory(const QString &prefix, const QString &location);
 
