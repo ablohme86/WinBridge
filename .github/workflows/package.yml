@@ -5,11 +5,12 @@ on:
     branches: [ main, master ]
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -108,3 +109,64 @@ jobs:
             dist/*.pkg.tar.zst
             dist/SHA256SUMS*
           if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [package-deb-rpm, package-arch]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download DEB & RPM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: winbridge-deb-rpm-packages
+          path: dist
+
+      - name: Download Arch Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: winbridge-arch-package
+          path: dist
+
+      - name: Generate unified SHA256 checksums
+        run: |
+          cd dist
+          rm -f SHA256SUMS
+          sha256sum winbridge* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Determine release version & tag
+        id: release_info
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            tag="${{ github.ref_name }}"
+            title="WinBridge ${{ github.ref_name }}"
+          else
+            version=$(grep -oP 'project\(WinBridge VERSION \K[0-9.]+' CMakeLists.txt || echo "0.2.0")
+            tag="v${version}"
+            title="WinBridge v${version}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "title=${title}" >> "$GITHUB_OUTPUT"
+
+      - name: List release assets
+        run: ls -la dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.title }}
+          files: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+            dist/SHA256SUMS*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
