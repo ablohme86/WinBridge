@@ -19,7 +19,9 @@
 #include "shared_space.h"
 #include "shortcuts.h"
 #include "launcher.h"
+#include "opener.h"
 
+#include <QApplication>
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -29,8 +31,7 @@
 
 using namespace WinBridge;
 
-int main(int argc, char **argv) {
-    QCoreApplication app(argc, argv);
+static int runWinBridge(QCoreApplication &app, bool showOpener) {
     app.setApplicationName("WinBridge");
     app.setApplicationVersion("0.2.0");
 
@@ -110,20 +111,10 @@ int main(int argc, char **argv) {
         QStringList extraArgs;
 
         if (positional.isEmpty()) {
-            QString tool = dialogTool();
-            QString home = QDir::homePath();
-            QProcess dialogProc;
-            if (tool == "kdialog") {
-                dialogProc.start("kdialog", {"--getopenfilename", home, "*.exe *.EXE|Windows-programmer"});
-            } else {
-                dialogProc.start("zenity", {"--file-selection", "--title=Velg en .exe-fil", "--file-filter=Windows | *.exe *.EXE"});
-            }
-            dialogProc.waitForFinished(-1);
-            if (dialogProc.exitCode() != 0) {
-                return 0;
-            }
-            exePath = QString::fromUtf8(dialogProc.readAllStandardOutput()).trimmed();
-            if (exePath.isEmpty()) return 0;
+            if (!showOpener) return 0;
+            OpenRequest request = showExecutableOpener(QCoreApplication::applicationFilePath());
+            if (!request.accepted) return 0;
+            exePath = request.executable;
         } else {
             exePath = positional.first();
             extraArgs = positional.mid(1);
@@ -137,7 +128,6 @@ int main(int argc, char **argv) {
             throw std::runtime_error("Velg en eksisterende .exe-fil.");
         }
         exePath = exeFi.canonicalFilePath().isEmpty() ? QDir::cleanPath(exeFi.absoluteFilePath()) : exeFi.canonicalFilePath();
-
         QString chosenProton;
         if (parser.isSet(protonOpt)) {
             QString p = parser.value(protonOpt);
@@ -156,6 +146,7 @@ int main(int argc, char **argv) {
         }
 
         if (chosenProton.isEmpty()) return 0;
+        rememberExecutable(exePath);
 
         return launch(
             exePath,
@@ -173,4 +164,46 @@ int main(int argc, char **argv) {
         showError(QString::fromUtf8(exc.what()));
         return 1;
     }
+}
+
+int main(int argc, char **argv) {
+    // Use Widgets only when no executable or command action was supplied. This
+    // keeps terminal commands and file-manager launches independent of a GUI.
+    bool graphicalOpener = true;
+    const QStringList commandActions = {
+        "--help", "-h", "--version", "-v", "--list", "--configure",
+        "--import-shortcuts", "--install-proton"
+    };
+    bool consumeValue = false;
+    for (int i = 1; i < argc; ++i) {
+        const QString argument = QString::fromLocal8Bit(argv[i]);
+        if (consumeValue) {
+            consumeValue = false;
+            continue;
+        }
+        if (commandActions.contains(argument) || argument.startsWith("--install-proton=")) {
+            graphicalOpener = false;
+            break;
+        }
+        if (argument == "--proton" || argument == "--prefix") {
+            consumeValue = true;
+            continue;
+        }
+        if (argument.startsWith("--proton=") || argument.startsWith("--prefix=")) continue;
+        if (argument == "--") {
+            if (i + 1 < argc) graphicalOpener = false;
+            break;
+        }
+        if (!argument.startsWith('-')) {
+            graphicalOpener = false;
+            break;
+        }
+    }
+    if (graphicalOpener) {
+        QApplication app(argc, argv);
+        app.setDesktopFileName("winbridge");
+        return runWinBridge(app, true);
+    }
+    QCoreApplication app(argc, argv);
+    return runWinBridge(app, false);
 }

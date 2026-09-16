@@ -9,27 +9,28 @@ Requirements:
 - CMake, a C++17 compiler, and Qt 6.2+ Core & Widgets development files
 - Qt 6 Test development files for the unit test suite
 - `xdg-utils` and `xdg-user-dirs`
-- KDialog or Zenity for the `.exe` launcher's first-run dialog
+- `shared-mime-info` (provides `update-mime-database`)
+- KDialog or Zenity for Proton selection and error dialogs
 - `umu-launcher` to download and run Proton without Steam (see below)
 - Working graphics drivers, including the 32-bit libraries required by your Proton build
 
 On Arch Linux, the build dependencies are available through:
 
 ```sh
-sudo pacman -S --needed base-devel cmake qt6-base xdg-utils xdg-user-dirs zenity umu-launcher
+sudo pacman -S --needed base-devel cmake qt6-base xdg-utils xdg-user-dirs shared-mime-info zenity umu-launcher
 ```
 
 On Debian, update the package index and install the build dependencies with:
 
 ```sh
 sudo apt-get update
-sudo apt-get install build-essential cmake qt6-base-dev qt6-base-dev-tools xdg-utils xdg-user-dirs zenity
+sudo apt-get install build-essential cmake qt6-base-dev qt6-base-dev-tools xdg-utils xdg-user-dirs shared-mime-info zenity
 ```
 
 On Fedora (RPM-based), install the build dependencies with DNF:
 
 ```sh
-sudo dnf install gcc-c++ make cmake qt6-qtbase-devel xdg-utils xdg-user-dirs zenity
+sudo dnf install gcc-c++ make cmake qt6-qtbase-devel xdg-utils xdg-user-dirs shared-mime-info zenity
 ```
 
 Build and install from the project directory:
@@ -42,6 +43,8 @@ make install-user
 This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run `sudo make install` to install system-wide to `/usr/local`.
 
 Both `make install` and `make install-user` register `.exe` associations through XDG and, when available, GIO for Nemo, Nautilus (Files), Caja, Thunar, PCManFM and Dolphin. With `sudo make install`, associations are configured for the user who invoked sudo. A root installation without `SUDO_USER` only installs the application; run `make install-user` from your desktop account to set your defaults. Package staging with `DESTDIR` does not change user associations.
+
+Installation also registers a dedicated `.exe` MIME type, including uppercase `.EXE`, so Dolphin opens these files with WinBridge even when their Linux executable permission is set. Existing files do not need `chmod` changes. The rules preserve other extensions such as `.dll` and native Linux executables. `make uninstall` removes these MIME rules and rebuilds the database.
 
 The user launcher uses the installed executable's absolute path, so it also works when your file manager does not have `~/.local/bin` on its `PATH`. Registration follows the [freedesktop MIME application association standard](https://specifications.freedesktop.org/mime-apps/latest/file.html). If a running file manager still shows the old handler, close and reopen it.
 
@@ -91,6 +94,8 @@ QT_QPA_PLATFORM=offscreen ./build/manager/winbridge-manager \
 
 Double-click an `.exe`, choose an installed Proton version or an automatic download on the first launch, and click **Open**. Subsequent launches reuse that choice.
 
+Open **WinBridge** without an `.exe` argument to use its graphical app launcher. It accepts a typed path or file selection, keeps the 12 most recently opened apps, and can create a shortcut for the selected executable on the Desktop or in the Start Menu. Missing recent files are removed automatically.
+
 Installers and standalone executables are both supported. Keep a portable application's supporting DLLs and data files alongside it as required by that application.
 
 ```sh
@@ -117,6 +122,7 @@ winbridge --prefix '/path/to/compatdata' '/path/to/application.exe'
 | `~/.local/share/winbridge/shared/pfx/drive_c` | Windows `C:` drive |
 | `~/.config/winbridge/settings.json` | Selected Proton and environment path |
 | `~/.config/WinBridge/Manager.conf` | Manager interface preferences |
+| `~/.config/winbridge/recent.json` | Recently opened executables |
 | `~/.local/state/winbridge/logs` | Launch and management logs |
 | `~/.local/share/Steam/compatibilitytools.d` | Versioned Proton downloads managed by UMU; no Steam client needed |
 | `~/.local/share/umu` | UMU runtime and managed compatibility tools |

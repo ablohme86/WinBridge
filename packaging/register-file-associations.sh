@@ -12,11 +12,33 @@ if [ "$(id -u)" = 0 ]; then
     exit 0
 fi
 
+user_mime=${XDG_DATA_HOME:-"$HOME/.local/share"}/mime
+if [ "${1:-}" = --remove-mime ]; then
+    rm -f "$user_mime/packages/winbridge-exe.xml"
+    if [ -d "$user_mime" ] && command -v update-mime-database >/dev/null 2>&1; then
+        update-mime-database "$user_mime"
+    fi
+    exit 0
+fi
+
 desktop_source=$1
 WINBRIDGE_EXECUTABLE=$2
+mime_source=${3:-"$(dirname "$0")/winbridge-exe.xml"}
 export WINBRIDGE_EXECUTABLE
 user_apps=${XDG_DATA_HOME:-"$HOME/.local/share"}/applications
 mkdir -p "$user_apps" "${XDG_CONFIG_HOME:-"$HOME/.config"}"
+
+# Install in the desktop user's XDG directory even for a custom/system PREFIX.
+# The source can already be this file during make install-user.
+if ! command -v update-mime-database >/dev/null 2>&1; then
+    echo "Install shared-mime-info (update-mime-database) and retry." >&2
+    exit 1
+fi
+mkdir -p "$user_mime/packages"
+if ! cmp -s "$mime_source" "$user_mime/packages/winbridge-exe.xml"; then
+    install -m 644 "$mime_source" "$user_mime/packages/winbridge-exe.xml"
+fi
+update-mime-database "$user_mime"
 
 # A desktop session may not have ~/.local/bin on PATH. Use the installed
 # executable's absolute path, including desktop-entry escaping for special chars.

@@ -39,6 +39,19 @@ bool saveShortcutsConfig(const QJsonObject &config);
 
 QString shortcutIconPath(const QString &sourceDir, const QString &iconName);
 
+enum class ShortcutLocation {
+    Desktop,
+    StartMenu
+};
+
+QString createExecutableShortcut(
+    const QString &exePath,
+    const QString &launcher,
+    ShortcutLocation location,
+    const QString &customDataDir = "",
+    const QString &customDesktopDir = ""
+);
+
 struct ShortcutInfo {
     QString id;
     QString name;

@@ -17,6 +17,7 @@ DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share
 APPLICATIONSDIR ?= $(DATADIR)/applications
+MIMEDIR ?= $(DATADIR)/mime
 PIXMAPSDIR ?= $(DATADIR)/pixmaps
 DOCDIR ?= $(DATADIR)/doc/winbridge
 BUILD_DIR ?= build
@@ -44,6 +45,8 @@ install: build
 	install -d $(DESTDIR)$(APPLICATIONSDIR)
 	install -m 644 packaging/winbridge.desktop $(DESTDIR)$(APPLICATIONSDIR)/winbridge.desktop
 	install -m 644 packaging/winbridge-manager.desktop $(DESTDIR)$(APPLICATIONSDIR)/winbridge-manager.desktop
+	install -d "$(DESTDIR)$(MIMEDIR)/packages"
+	install -m 644 packaging/winbridge-exe.xml "$(DESTDIR)$(MIMEDIR)/packages/winbridge-exe.xml"
 	install -d $(DESTDIR)$(PIXMAPSDIR)
 	install -m 644 assets/winbridge.png $(DESTDIR)$(PIXMAPSDIR)/winbridge.png
 	install -m 644 assets/winbridge.png $(DESTDIR)$(PIXMAPSDIR)/winbridge-manager.png
@@ -86,7 +89,9 @@ install: build
 		gtk-update-icon-cache -f -t $(DATADIR)/icons/hicolor 2>/dev/null || true; \
 	fi
 	@if [ -z "$(DESTDIR)" ]; then \
-		sh packaging/register-file-associations.sh "$(APPLICATIONSDIR)/winbridge.desktop" "$(abspath $(BINDIR))/winbridge"; \
+		set -e; \
+		update-mime-database "$(MIMEDIR)"; \
+		sh packaging/register-file-associations.sh "$(APPLICATIONSDIR)/winbridge.desktop" "$(abspath $(BINDIR))/winbridge" "$(MIMEDIR)/packages/winbridge-exe.xml"; \
 	fi
 	@echo "WinBridge successfully installed and updated (PREFIX=$(PREFIX))"
 
@@ -94,6 +99,13 @@ install-user: build
 	$(MAKE) install PREFIX=$(HOME)/.local
 
 uninstall:
+	@if [ -z "$(DESTDIR)" ]; then \
+		sh packaging/register-file-associations.sh --remove-mime; \
+	fi
+	rm -f "$(DESTDIR)$(MIMEDIR)/packages/winbridge-exe.xml"
+	@if [ -z "$(DESTDIR)" ] && command -v update-mime-database >/dev/null 2>&1; then \
+		update-mime-database "$(MIMEDIR)"; \
+	fi
 	rm -f $(DESTDIR)$(BINDIR)/winbridge
 	rm -f $(DESTDIR)$(BINDIR)/winbridge-backend
 	rm -f $(DESTDIR)$(BINDIR)/winbridge-manager

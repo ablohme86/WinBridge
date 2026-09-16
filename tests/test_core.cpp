@@ -436,6 +436,40 @@ engine.mkdir(parents=True, exist_ok=True)
         QDir deskDir(customDesktop);
         QCOMPARE(deskDir.entryList({"winbridge-*.desktop"}, QDir::Files).size(), 0);
     }
+
+    void createPortableExecutableShortcuts() {
+        QTemporaryDir tmp;
+        const QString executable = tmp.filePath("Portable App.exe");
+        QFile exe(executable);
+        QVERIFY(exe.open(QIODevice::WriteOnly));
+        exe.write("MZ");
+        exe.close();
+        const QString launcher = tmp.filePath("bin/winbridge");
+        QVERIFY(QDir().mkpath(QFileInfo(launcher).dir().absolutePath()));
+        QFile launcherFile(launcher);
+        QVERIFY(launcherFile.open(QIODevice::WriteOnly));
+        launcherFile.close();
+        const QString data = tmp.filePath("share");
+        const QString desktop = tmp.filePath("Desktop");
+        QVERIFY(QDir().mkpath(desktop));
+
+        const QString menuFile = createExecutableShortcut(
+            executable, launcher, ShortcutLocation::StartMenu, data, desktop);
+        const QString desktopFile = createExecutableShortcut(
+            executable, launcher, ShortcutLocation::Desktop, data, desktop);
+
+        QVERIFY(menuFile.startsWith(data + "/applications/"));
+        QVERIFY(desktopFile.startsWith(desktop + "/"));
+        for (const QString &path : {menuFile, desktopFile}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const QByteArray content = file.readAll();
+            QVERIFY(content.contains("Name=Portable App"));
+            QVERIFY(content.contains(desktopQuote(launcher).toUtf8()));
+            QVERIFY(content.contains(desktopQuote(executable).toUtf8()));
+            QVERIFY(file.permissions().testFlag(QFileDevice::ExeOwner));
+        }
+    }
 };
 
 QTEST_MAIN(CoreTests)

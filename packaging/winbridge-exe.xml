@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <!-- Keep EXE files out of KIO native execution, even when chmod +x is set.
+       Do not inherit x-msdownload/x-executable on the WinBridge type. -->
+  <mime-type type="application/x-winbridge-exe">
+    <comment>Windows program (WinBridge)</comment>
+    <comment xml:lang="nb">Windows-program (WinBridge)</comment>
+    <glob pattern="*.exe" weight="100"/>
+    <icon name="winbridge"/>
+  </mime-type>
+  <!-- Qt considers lower-weight glob matches during content detection too.
+       Remove competing EXE globs while preserving the other standard extensions. -->
+  <mime-type type="application/x-msdownload">
+    <glob-deleteall/>
+    <glob pattern="*.dll" weight="50"/>
+    <glob pattern="*.cpl" weight="50"/>
+    <glob pattern="*.drv" weight="50"/>
+    <glob pattern="*.scr" weight="50"/>
+  </mime-type>
+  <mime-type type="application/x-dosexec">
+    <glob-deleteall/>
+  </mime-type>
+  <mime-type type="application/x-lx-executable">
+    <glob-deleteall/>
+    <glob pattern="*.386" weight="10"/>
+    <glob pattern="*.dll" weight="10"/>
+    <glob pattern="*.sys" weight="10"/>
+    <glob pattern="*.vxd" weight="10"/>
+  </mime-type>
+  <mime-type type="application/x-ms-ne-executable">
+    <glob-deleteall/>
+    <glob pattern="*.dll" weight="20"/>
+    <glob pattern="*.cpl" weight="20"/>
+    <glob pattern="*.drv" weight="20"/>
+    <glob pattern="*.scr" weight="20"/>
+  </mime-type>
+  <mime-type type="application/vnd.microsoft.portable-executable">
+    <glob-deleteall/>
+    <glob pattern="*.dll" weight="40"/>
+    <glob pattern="*.cpl" weight="40"/>
+    <glob pattern="*.drv" weight="40"/>
+    <glob pattern="*.scr" weight="40"/>
+    <glob pattern="*.efi" weight="50"/>
+    <glob pattern="*.ocx" weight="50"/>
+    <glob pattern="*.sys" weight="50"/>
+  </mime-type>
+</mime-info>

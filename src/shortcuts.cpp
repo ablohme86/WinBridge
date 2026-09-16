@@ -28,8 +28,10 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTemporaryFile>
+#include <stdexcept>
 #include <sys/stat.h>
 
 namespace WinBridge {
@@ -203,6 +205,91 @@ QString shortcutIconPath(const QString &sourceDir, const QString &iconName) {
         }
     }
     return bestPath;
+}
+
+QString createExecutableShortcut(
+    const QString &exePath,
+    const QString &launcher,
+    ShortcutLocation location,
+    const QString &customDataDir,
+    const QString &customDesktopDir
+) {
+    QFileInfo exeInfo(exePath);
+    const QString suffix = exeInfo.suffix().toLower();
+    if (!exeInfo.isFile() || (suffix != "exe" && suffix != "lnk")) {
+        throw std::runtime_error("Select an existing .exe or .lnk file.");
+    }
+    if (launcher.trimmed().isEmpty()) {
+        throw std::runtime_error("Could not locate the WinBridge launcher.");
+    }
+
+    const QString canonicalExe = exeInfo.canonicalFilePath().isEmpty()
+        ? QDir::cleanPath(exeInfo.absoluteFilePath())
+        : exeInfo.canonicalFilePath();
+    const QString name = exeInfo.completeBaseName();
+    const QString identity = QString::fromUtf8(QCryptographicHash::hash(
+        canonicalExe.toUtf8(), QCryptographicHash::Sha256).toHex()).left(20);
+    const QString filename = "winbridge-app-" + identity + ".desktop";
+
+    QString data = customDataDir;
+    if (data.isEmpty()) {
+        data = qEnvironmentVariable("XDG_DATA_HOME");
+        if (data.isEmpty()) data = QDir::homePath() + "/.local/share";
+    }
+
+    QString destination;
+    if (location == ShortcutLocation::Desktop) {
+        const QString desktop = customDesktopDir.isEmpty() ? desktopDir() : customDesktopDir;
+        if (desktop.isEmpty()) {
+            throw std::runtime_error("Could not locate the Desktop folder.");
+        }
+        destination = QDir(desktop).filePath(filename);
+    } else {
+        destination = QDir(data + "/applications").filePath(filename);
+    }
+
+    QStringList command;
+    if (launcher.endsWith(".py")) command << "/usr/bin/python3";
+    command << launcher << "--" << canonicalExe;
+    QStringList quotedCommand;
+    for (const QString &part : command) quotedCommand << desktopQuote(part);
+
+    const QString content = QString(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=%1\n"
+        "Comment=Open with WinBridge\n"
+        "Exec=%2\n"
+        "Icon=winbridge\n"
+        "Terminal=false\n"
+        "Categories=Utility;\n"
+    ).arg(field(name), quotedCommand.join(' '));
+
+    QDir destinationDir = QFileInfo(destination).dir();
+    if (!destinationDir.exists() && !destinationDir.mkpath(".")) {
+        throw std::runtime_error("Could not create the shortcut folder.");
+    }
+    const QByteArray bytes = content.toUtf8();
+    QSaveFile file(destination);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) {
+        throw std::runtime_error("Could not write the shortcut.");
+    }
+    if (!file.commit()) {
+        throw std::runtime_error("Could not install the shortcut.");
+    }
+    ::chmod(destination.toUtf8().constData(), 0755);
+
+    if (location == ShortcutLocation::StartMenu) {
+        QProcess update;
+        update.start("update-desktop-database", {data + "/applications"});
+        update.waitForFinished(1000);
+        if (customDataDir.isEmpty()) {
+            QProcess sycoca;
+            sycoca.start("kbuildsycoca6", {"--noincremental"});
+            sycoca.waitForFinished(3000);
+        }
+    }
+    return destination;
 }
 
 static QMap<QString, QString> parseDesktopFile(const QString &path) {
