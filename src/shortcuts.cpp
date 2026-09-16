@@ -17,6 +17,7 @@
 */
 
 #include "shortcuts.h"
+#include "executable_icon.h"
 #include "shared_space.h"
 #include <functional>
 
@@ -254,16 +255,19 @@ QString createExecutableShortcut(
     QStringList quotedCommand;
     for (const QString &part : command) quotedCommand << desktopQuote(part);
 
+    QString icon = executableIconPath(canonicalExe, data + "/winbridge/icons");
+    if (icon.isEmpty()) icon = "winbridge";
+
     const QString content = QString(
         "[Desktop Entry]\n"
         "Type=Application\n"
         "Name=%1\n"
         "Comment=Open with WinBridge\n"
         "Exec=%2\n"
-        "Icon=winbridge\n"
+        "Icon=%3\n"
         "Terminal=false\n"
         "Categories=Utility;\n"
-    ).arg(field(name), quotedCommand.join(' '));
+    ).arg(field(name), quotedCommand.join(' '), field(icon));
 
     QDir destinationDir = QFileInfo(destination).dir();
     if (!destinationDir.exists() && !destinationDir.mkpath(".")) {

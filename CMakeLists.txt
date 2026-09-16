@@ -12,6 +12,7 @@ set(CMAKE_AUTORCC ON)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_library(winbridge_core STATIC
+    src/executable_icon.cpp
     src/shared_space.cpp
     src/shortcuts.cpp
     src/launcher.cpp

@@ -13,7 +13,7 @@ WinBridge lets you open Windows `.exe` files from your Linux desktop using Proto
 
 Open **WinBridge** without an `.exe` argument to launch Windows apps from one native window. Enter a path directly, browse for an `.exe` or `.lnk` file, or select one of the 12 most recently opened apps. Missing files are removed from the list automatically.
 
-Once an app is selected, **Make Shortcut** can add it directly to the Linux Desktop or Start Menu. This also works for portable apps and installers that do not export their own shortcuts. The launcher uses the theme selected in WinBridge Manager.
+Once an app is selected, **Make Shortcut** can add it directly to the Linux Desktop or Start Menu. This also works for portable apps and installers that do not export their own shortcuts. WinBridge extracts the app's original Windows icon for the recent list and generated shortcuts, falling back to the WinBridge icon when an executable has no readable icon. The launcher uses the theme selected in WinBridge Manager.
 
 | Classic Light | Retro Dark |
 | --- | --- |

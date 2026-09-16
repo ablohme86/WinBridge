@@ -5,6 +5,7 @@
 */
 
 #include "opener.h"
+#include "executable_icon.h"
 #include "shortcuts.h"
 
 #include <QtWidgets>
@@ -150,6 +151,7 @@ public:
         list->setSelectionMode(QAbstractItemView::SingleSelection);
         list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         list->setAlternatingRowColors(false);
+        list->setIconSize(QSize(40, 40));
         content->addWidget(list, 1);
 
         emptyLabel = new QLabel(tr("Apps you open with WinBridge will appear here."));
@@ -257,7 +259,10 @@ private:
             item->setToolTip(path);
             item->setData(Qt::UserRole, path);
             item->setData(Qt::UserRole + 1, info.dir().absolutePath());
-            item->setIcon(QIcon::fromTheme("application-x-executable"));
+            const QString iconPath = executableIconPath(path);
+            item->setIcon(iconPath.isEmpty()
+                ? QIcon::fromTheme("application-x-executable")
+                : QIcon(iconPath));
             item->setSizeHint(QSize(0, 62));
             list->addItem(item);
         }

@@ -17,7 +17,9 @@
 */
 
 #include <QtTest>
+#include <QBuffer>
 #include <QImage>
+#include "executable_icon.h"
 #include "shared_space.h"
 #include "shortcuts.h"
 #include "manager_backend.h"
@@ -44,6 +46,104 @@ class CoreTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void extractsEmbeddedWindowsExecutableIcon() {
+        auto put16 = [](QByteArray &data, int offset, quint16 value) {
+            data[offset] = char(value & 0xff);
+            data[offset + 1] = char((value >> 8) & 0xff);
+        };
+        auto put32 = [](QByteArray &data, int offset, quint32 value) {
+            data[offset] = char(value & 0xff);
+            data[offset + 1] = char((value >> 8) & 0xff);
+            data[offset + 2] = char((value >> 16) & 0xff);
+            data[offset + 3] = char((value >> 24) & 0xff);
+        };
+
+        QImage source(32, 32, QImage::Format_ARGB32);
+        source.fill(QColor(28, 96, 210));
+        QByteArray png;
+        QBuffer pngBuffer(&png);
+        QVERIFY(pngBuffer.open(QIODevice::WriteOnly));
+        QVERIFY(source.save(&pngBuffer, "PNG"));
+
+        QByteArray pe(0x600, '\0');
+        put16(pe, 0x00, 0x5a4d);
+        put32(pe, 0x3c, 0x80);
+        put32(pe, 0x80, 0x00004550);
+        put16(pe, 0x86, 1);
+        put16(pe, 0x94, 224);
+        put16(pe, 0x98, 0x10b);
+        put32(pe, 0x108, 0x1000);
+        put32(pe, 0x10c, 0x400);
+        put32(pe, 0x180, 0x400);
+        put32(pe, 0x184, 0x1000);
+        put32(pe, 0x188, 0x400);
+        put32(pe, 0x18c, 0x200);
+
+        const int resources = 0x200;
+        put16(pe, resources + 14, 2);
+        put32(pe, resources + 16, 3);
+        put32(pe, resources + 20, 0x80000020);
+        put32(pe, resources + 24, 14);
+        put32(pe, resources + 28, 0x80000040);
+        put16(pe, resources + 0x20 + 14, 1);
+        put32(pe, resources + 0x20 + 16, 1);
+        put32(pe, resources + 0x20 + 20, 0x80000060);
+        put16(pe, resources + 0x40 + 14, 1);
+        put32(pe, resources + 0x40 + 16, 1);
+        put32(pe, resources + 0x40 + 20, 0x80000080);
+        put16(pe, resources + 0x60 + 14, 1);
+        put32(pe, resources + 0x60 + 16, 1033);
+        put32(pe, resources + 0x60 + 20, 0xa0);
+        put16(pe, resources + 0x80 + 14, 1);
+        put32(pe, resources + 0x80 + 16, 1033);
+        put32(pe, resources + 0x80 + 20, 0xb0);
+        put32(pe, resources + 0xa0, 0x1100);
+        put32(pe, resources + 0xa4, png.size());
+        put32(pe, resources + 0xb0, 0x1200);
+        put32(pe, resources + 0xb4, 20);
+        pe.replace(0x300, png.size(), png);
+        QByteArray group(20, '\0');
+        put16(group, 2, 1);
+        put16(group, 4, 1);
+        group[6] = 32;
+        group[7] = 32;
+        put16(group, 10, 1);
+        put16(group, 12, 32);
+        put32(group, 14, png.size());
+        put16(group, 18, 1);
+        pe.replace(0x400, group.size(), group);
+
+        QTemporaryDir tmp;
+        const QString executable = tmp.filePath("icon-test.exe");
+        QFile file(executable);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(pe), pe.size());
+        file.close();
+        const QString icon = executableIconPath(executable, tmp.filePath("icons"));
+        QVERIFY(!icon.isEmpty());
+        QImage extracted(icon);
+        QCOMPARE(extracted.size(), QSize(32, 32));
+        QCOMPARE(extracted.pixelColor(16, 16), QColor(28, 96, 210));
+
+        const QString launcher = tmp.filePath("winbridge");
+        QFile launcherFile(launcher);
+        QVERIFY(launcherFile.open(QIODevice::WriteOnly));
+        launcherFile.close();
+        const QString data = tmp.filePath("share");
+        const QString desktop = tmp.filePath("Desktop");
+        QVERIFY(QDir().mkpath(desktop));
+        const QString shortcut = createExecutableShortcut(
+            executable, launcher, ShortcutLocation::Desktop, data, desktop);
+        QFile shortcutFile(shortcut);
+        QVERIFY(shortcutFile.open(QIODevice::ReadOnly));
+        const QString shortcutText = QString::fromUtf8(shortcutFile.readAll());
+        QRegularExpression iconLine("(?:^|\\n)Icon=([^\\n]+)");
+        const auto match = iconLine.match(shortcutText);
+        QVERIFY(match.hasMatch());
+        QVERIFY(QFileInfo(match.captured(1)).isFile());
+        QVERIFY(!QImage(match.captured(1)).isNull());
+    }
+
     void programInstallationDirectories() {
         QTemporaryDir tmp;
         QString app = tmp.filePath("pfx/drive_c/Program Files/My App");
