@@ -54,6 +54,19 @@ private slots:
         QVERIFY(foundShortcutMenu);
         QVERIFY(foundOpen);
     }
+
+    void launcherWindowCanRenderScreenshot() {
+        QTemporaryDir tmp;
+        const QString screenshot = tmp.filePath("launcher.png");
+        const OpenRequest request = showExecutableOpener(
+            "/usr/bin/winbridge", nullptr, screenshot, "dark");
+        QVERIFY(!request.accepted);
+        QVERIFY(request.screenshotSaved);
+        QImage image(screenshot);
+        QVERIFY(!image.isNull());
+        QVERIFY(image.width() >= 720);
+        QVERIFY(image.height() >= 560);
+    }
 };
 
 QTEST_MAIN(OpenerTests)

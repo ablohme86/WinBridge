@@ -8,6 +8,17 @@ WinBridge lets you open Windows `.exe` files from your Linux desktop using Proto
 
 ![WinBridge Manager](assets/winbridge-manager.png)
 ![WinBridge Manager - Retro Dark](assets/winbridge-manager-dark.png)
+
+## WinBridge app launcher
+
+Open **WinBridge** without an `.exe` argument to launch Windows apps from one native window. Enter a path directly, browse for an `.exe` or `.lnk` file, or select one of the 12 most recently opened apps. Missing files are removed from the list automatically.
+
+Once an app is selected, **Make Shortcut** can add it directly to the Linux Desktop or Start Menu. This also works for portable apps and installers that do not export their own shortcuts. The launcher uses the theme selected in WinBridge Manager.
+
+| Classic Light | Retro Dark |
+| --- | --- |
+| ![WinBridge app launcher in Classic Light](assets/winbridge-launcher.png) | ![WinBridge app launcher in Retro Dark](assets/winbridge-launcher-dark.png) |
+
 For installation, build instructions, and configuration, see [INSTALL.md](INSTALL.md).
 
 ## What WinBridge does
@@ -44,5 +55,3 @@ The Manager offers two Windows 9x-inspired themes: **Classic Light (Windows 98)*
 WinBridge uses [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) to run Proton with its matching Steam Linux Runtime. Install UMU, then download Proton from Settings or select an existing build. The Steam client is not required. Existing Steam runtime installations remain usable when UMU is unavailable. Compatibility varies between Windows programs.
 
 Both installers and portable applications are supported. Automatic shortcut import depends on the installer exporting supported shortcuts through Proton. Desktop icons also depend on your desktop environment's support; imported application menu entries remain available.
-
-Opening **WinBridge** from the application menu shows the app launcher. Select a recent app or enter an `.exe`/`.lnk` path, then choose **Open**. The **Make Shortcut** menu can add the selected app directly to the Desktop or Start Menu, including portable apps that do not export a shortcut themselves. The launcher follows the light or dark theme selected in WinBridge Manager.

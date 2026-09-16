@@ -57,6 +57,11 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
     QCommandLineOption prefixOpt("prefix", "Use a specific compatdata directory", "path");
     parser.addOption(prefixOpt);
 
+    QCommandLineOption screenshotOpt("screenshot", "Render the app opener to an image and exit", "path");
+    parser.addOption(screenshotOpt);
+    QCommandLineOption themeOpt("theme", "App opener theme: classic or dark", "theme");
+    parser.addOption(themeOpt);
+
     parser.addPositionalArgument("exe", "Windows executable (.exe or .lnk) to run", "[exe]");
     parser.addPositionalArgument("arguments", "Arguments passed to the executable", "[arguments...]");
 
@@ -112,7 +117,10 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
 
         if (positional.isEmpty()) {
             if (!showOpener) return 0;
-            OpenRequest request = showExecutableOpener(QCoreApplication::applicationFilePath());
+            OpenRequest request = showExecutableOpener(
+                QCoreApplication::applicationFilePath(), nullptr,
+                parser.value(screenshotOpt), parser.value(themeOpt));
+            if (parser.isSet(screenshotOpt)) return request.screenshotSaved ? 0 : 1;
             if (!request.accepted) return 0;
             exePath = request.executable;
         } else {
@@ -185,11 +193,13 @@ int main(int argc, char **argv) {
             graphicalOpener = false;
             break;
         }
-        if (argument == "--proton" || argument == "--prefix") {
+        if (argument == "--proton" || argument == "--prefix" ||
+            argument == "--screenshot" || argument == "--theme") {
             consumeValue = true;
             continue;
         }
-        if (argument.startsWith("--proton=") || argument.startsWith("--prefix=")) continue;
+        if (argument.startsWith("--proton=") || argument.startsWith("--prefix=") ||
+            argument.startsWith("--screenshot=") || argument.startsWith("--theme=")) continue;
         if (argument == "--") {
             if (i + 1 < argc) graphicalOpener = false;
             break;

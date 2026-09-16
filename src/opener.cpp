@@ -67,7 +67,7 @@ bool rememberExecutable(const QString &exePath, const QString &customPath) {
 
 class ExecutableOpener final : public QDialog {
 public:
-    explicit ExecutableOpener(const QString &launcher, QWidget *parent = nullptr)
+    explicit ExecutableOpener(const QString &launcher, const QString &theme, QWidget *parent = nullptr)
         : QDialog(parent), launcherPath(launcher) {
         setObjectName("executableOpener");
         setWindowTitle("WinBridge");
@@ -211,10 +211,11 @@ public:
         connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
         connect(openButton, &QPushButton::clicked, this, [this] { openSelected(); });
 
-        setStyleSheet(styleSheetText());
+        setStyleSheet(styleSheetText(theme));
         populateRecents();
         updateSelection();
-        pathEdit->setFocus();
+        if (list->count() > 0) list->setFocus();
+        else pathEdit->setFocus();
     }
 
     QString executable() const { return selectedExecutable; }
@@ -264,6 +265,7 @@ private:
         list->setVisible(hasItems);
         emptyLabel->setVisible(!hasItems);
         clearButton->setVisible(hasItems);
+        if (hasItems) list->setCurrentRow(0);
     }
 
     void updateSelection() {
@@ -296,8 +298,11 @@ private:
         }
     }
 
-    static QString styleSheetText() {
-        const bool dark = QSettings("WinBridge", "Manager").value("theme", "classic").toString() == "dark";
+    static QString styleSheetText(const QString &requestedTheme) {
+        const QString theme = requestedTheme.isEmpty()
+            ? QSettings("WinBridge", "Manager").value("theme", "classic").toString()
+            : requestedTheme;
+        const bool dark = theme == "dark";
         QString style = R"(
             QWidget { background: {{face}}; color: {{text}}; font-family: 'Segoe UI','Tahoma','MS Sans Serif','DejaVu Sans',sans-serif; font-size: 12px; }
             QFrame#topNav { background: {{nav}}; border-bottom: 2px solid {{shadow}}; }
@@ -341,9 +346,20 @@ private:
     }
 };
 
-OpenRequest showExecutableOpener(const QString &launcher, QWidget *parent) {
-    ExecutableOpener dialog(launcher, parent);
+OpenRequest showExecutableOpener(
+    const QString &launcher,
+    QWidget *parent,
+    const QString &screenshotPath,
+    const QString &theme
+) {
+    ExecutableOpener dialog(launcher, theme, parent);
     OpenRequest request;
+    if (!screenshotPath.isEmpty()) {
+        QTimer::singleShot(250, &dialog, [&] {
+            request.screenshotSaved = dialog.grab().save(screenshotPath);
+            dialog.reject();
+        });
+    }
     request.accepted = dialog.exec() == QDialog::Accepted;
     request.executable = dialog.executable();
     return request;

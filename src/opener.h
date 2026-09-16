@@ -19,9 +19,15 @@ bool rememberExecutable(const QString &exePath, const QString &customPath = "");
 
 struct OpenRequest {
     bool accepted = false;
+    bool screenshotSaved = false;
     QString executable;
 };
 
-OpenRequest showExecutableOpener(const QString &launcher, QWidget *parent = nullptr);
+OpenRequest showExecutableOpener(
+    const QString &launcher,
+    QWidget *parent = nullptr,
+    const QString &screenshotPath = "",
+    const QString &theme = ""
+);
 
 } // namespace WinBridge
