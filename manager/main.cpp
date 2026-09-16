@@ -555,11 +555,19 @@ protected:
         dialog.exec();
     }
 public:
+    ~Manager() override {
+        for (auto *p : findChildren<QProcess*>()) {
+            p->disconnect();
+            if (p->state() != QProcess::NotRunning) {
+                p->kill();
+                p->waitForFinished(500);
+            }
+        }
+    }
     Manager(const QString &backendPath, bool preview = false, bool demo = false) : backend(backendPath), screenshot(preview), demoMode(demo) {
         setWindowTitle("WinBridge Manager");
         setWindowIcon(QIcon(":/assets/winbridge.png"));
-        resize(1200, 780);
-        setMinimumSize(1020, 680);
+        resize(1280, 780);
         setStyleSheet(retroStyleSheet());
 
         auto *windowLayout = new QVBoxLayout(this);
@@ -569,21 +577,38 @@ public:
         // 1. Top Navigation Bar
         auto *topNav = new QFrame; topNav->setObjectName("topNav");
         auto *navLayout = new QHBoxLayout(topNav);
-        navLayout->setContentsMargins(16, 10, 16, 10);
-        navLayout->setSpacing(10);
+        navLayout->setContentsMargins(14, 10, 14, 10);
+        navLayout->setSpacing(8);
+
+        auto *brandBox = new QWidget;
+        brandBox->setObjectName("brandBox");
+        auto *brandLayout = new QHBoxLayout(brandBox);
+        brandLayout->setContentsMargins(0, 0, 0, 0);
+        brandLayout->setSpacing(10);
 
         auto *brandLogo = new QLabel;
+        brandLogo->setObjectName("brandLogo");
         brandLogo->setPixmap(QPixmap(":/assets/winbridge.png").scaled(62, 62, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         brandLogo->setFixedSize(62, 62);
-        navLayout->addWidget(brandLogo);
+        brandLayout->addWidget(brandLogo);
 
-        auto *brandTitles = new QVBoxLayout; brandTitles->setSpacing(2);
+        auto *brandTitles = new QVBoxLayout;
+        brandTitles->setSpacing(2);
         auto *brandTitle = label("WinBridge", "brand");
         auto *brandSub = label("Pro App Manager", "brandSub");
-        brandTitles->addWidget(brandTitle); brandTitles->addWidget(brandSub);
-        navLayout->addLayout(brandTitles);
+        brandTitle->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        brandSub->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        brandTitles->addWidget(brandTitle);
+        brandTitles->addWidget(brandSub);
+        brandLayout->addLayout(brandTitles);
 
-        navLayout->addSpacing(16);
+        brandLayout->setSizeConstraint(QLayout::SetFixedSize);
+        brandBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+        brandBox->setMinimumSize(brandLayout->sizeHint());
+        navLayout->addWidget(brandBox);
+
+        navLayout->addSpacing(12);
+        navLayout->setSizeConstraint(QLayout::SetMinimumSize);
 
         // Main pages
         tabAll = button(T("INSTALLED APPS"), "filterTab");
@@ -629,7 +654,7 @@ public:
         search->setObjectName("search");
         search->setPlaceholderText(T("Search for an app …"));
         search->setClearButtonEnabled(true);
-        search->setFixedWidth(130);
+        search->setFixedWidth(120);
         navLayout->addWidget(search);
 
         refreshButton = button(QIcon(":/icons/refresh.png"), T("Refresh"));
@@ -923,6 +948,10 @@ public:
             render();
             status->setText(T("Your environment is created when you first open an .exe file with WinBridge."));
         }
+        const int minWidth = qMax(1020, layout()->minimumSize().width());
+        const int minHeight = qMax(680, layout()->minimumSize().height());
+        setMinimumSize(minWidth, minHeight);
+        resize(qMax(1280, minWidth), qMax(780, minHeight));
     }
 };
 

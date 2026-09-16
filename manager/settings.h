@@ -67,6 +67,16 @@ inline QString retroStyleSheet(QString theme = QString()) {
             background: {{topNavGrad}};
             border-bottom: 2px solid {{btnShadow}};
         }
+        QFrame#topNav QPushButton {
+            padding: 5px 9px;
+        }
+        QFrame#topNav QPushButton#filterTab {
+            padding: 5px 12px;
+        }
+        QWidget#brandBox {
+            background: transparent;
+            border: none;
+        }
         QLabel {
             background: transparent;
         }

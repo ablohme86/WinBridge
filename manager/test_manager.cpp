@@ -457,6 +457,46 @@ else: print(json.dumps({'prefix':'/tmp/test','proton':'Test','ready':True,'progr
         end->click();
         QTRY_VERIFY_WITH_TIMEOUT([&] { QFile f(calls); return f.open(QIODevice::ReadOnly) && f.readAll().contains("kill_task --key portable-id"); }(), 5000);
     }
+    void brandBoxNeverSqueezed() {
+        QTemporaryDir dir;
+        QString script = dir.filePath("backend.py");
+        QFile f(script); QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("import json\nprint(json.dumps({'prefix':'/tmp/test','proton':'Test','ready':True,'programs':[]}))\n"); f.close();
+        for (const QString &lang : {"en-US", "no-NB"}) {
+            I18n::load(lang);
+            Manager window(script);
+            window.show();
+            QTest::qWait(100);
+            auto *brandBox = window.findChild<QWidget*>("brandBox");
+            auto *brandLogo = window.findChild<QLabel*>("brandLogo");
+            auto *brandTitle = window.findChild<QLabel*>("brand");
+            auto *brandSub = window.findChild<QLabel*>("brandSub");
+            QVERIFY(brandBox);
+            QVERIFY(brandLogo);
+            QVERIFY(brandTitle);
+            QVERIFY(brandSub);
+            QCOMPARE(brandLogo->size(), QSize(62, 62));
+            QCOMPARE(brandTitle->text(), QString("WinBridge"));
+            QCOMPARE(brandSub->text(), QString("Pro App Manager"));
+            QVERIFY(brandTitle->width() >= brandTitle->sizeHint().width());
+            QVERIFY(brandSub->width() >= brandSub->sizeHint().width());
+            QVERIFY(brandBox->width() >= brandBox->sizeHint().width());
+
+            // Resizing window smaller must not crush or overlap brandBox
+            window.resize(1020, 680);
+            QTest::qWait(100);
+            QVERIFY(brandTitle->width() >= brandTitle->sizeHint().width());
+            QVERIFY(brandSub->width() >= brandSub->sizeHint().width());
+            QVERIFY(brandBox->width() >= brandBox->sizeHint().width());
+            QCOMPARE(brandLogo->size(), QSize(62, 62));
+
+            // Ensure adjacent widgets do not overlap brandBox
+            for (auto *tab : window.findChildren<QPushButton*>("filterTab")) {
+                QVERIFY(tab->geometry().left() >= brandBox->geometry().right());
+            }
+        }
+        I18n::load("en-US");
+    }
 };
 QTEST_MAIN(ManagerTest)
 #include "test_manager.moc"
