@@ -52,5 +52,12 @@ endif()
 install(TARGETS winbridge winbridge-backend RUNTIME DESTINATION bin)
 install(FILES packaging/winbridge.desktop packaging/winbridge-manager.desktop DESTINATION share/applications)
 install(FILES packaging/winbridge-exe.xml DESTINATION share/mime/packages)
-install(FILES assets/winbridge.png DESTINATION share/pixmaps)
+install(FILES assets/winbridge-app-launcher.png DESTINATION share/pixmaps RENAME winbridge.png)
+install(FILES assets/winbridge-manager-icon.png DESTINATION share/pixmaps RENAME winbridge-manager.png)
+foreach(ICON_SIZE 16 22 24 32 48 64 128 256 512)
+    install(FILES assets/icons/${ICON_SIZE}x${ICON_SIZE}/winbridge.png
+        DESTINATION share/icons/hicolor/${ICON_SIZE}x${ICON_SIZE}/apps)
+    install(FILES assets/icons/${ICON_SIZE}x${ICON_SIZE}/winbridge-manager.png
+        DESTINATION share/icons/hicolor/${ICON_SIZE}x${ICON_SIZE}/apps)
+endforeach()
 install(FILES README.md INSTALL.md DESTINATION share/doc/winbridge)

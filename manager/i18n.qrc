@@ -4,7 +4,7 @@
         <file alias="no-NB.i18n">i18n/no-NB.i18n</file>
     </qresource>
     <qresource prefix="/assets">
-        <file alias="winbridge.png">../assets/winbridge.png</file>
+        <file alias="winbridge.png">../assets/winbridge-manager-icon.png</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="uninstall.png">icons/uninstall.png</file>

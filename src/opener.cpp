@@ -234,20 +234,18 @@ private:
     QToolButton *clearButton = nullptr;
 
     static QIcon resolveIcon() {
-        QIcon icon = QIcon::fromTheme("winbridge");
-        if (!icon.isNull()) return icon;
         const QString appDir = QCoreApplication::applicationDirPath();
         const QStringList candidates = {
             appDir + "/../share/pixmaps/winbridge.png",
-            appDir + "/../assets/winbridge.png",
-            appDir + "/../../assets/winbridge.png",
+            appDir + "/../assets/winbridge-app-launcher.png",
+            appDir + "/../../assets/winbridge-app-launcher.png",
             "/usr/local/share/pixmaps/winbridge.png",
             "/usr/share/pixmaps/winbridge.png"
         };
         for (const QString &candidate : candidates) {
             if (QFileInfo(candidate).isFile()) return QIcon(candidate);
         }
-        return {};
+        return QIcon::fromTheme("winbridge");
     }
 
     void populateRecents() {

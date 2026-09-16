@@ -3,6 +3,6 @@ Type=Application
 Name=WinBridge Manager
 Comment=View and uninstall Windows programs
 Exec=winbridge-manager
-Icon=winbridge
+Icon=winbridge-manager
 Terminal=false
 Categories=Utility;

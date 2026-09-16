@@ -48,13 +48,13 @@ install: build
 	install -d "$(DESTDIR)$(MIMEDIR)/packages"
 	install -m 644 packaging/winbridge-exe.xml "$(DESTDIR)$(MIMEDIR)/packages/winbridge-exe.xml"
 	install -d $(DESTDIR)$(PIXMAPSDIR)
-	install -m 644 assets/winbridge.png $(DESTDIR)$(PIXMAPSDIR)/winbridge.png
-	install -m 644 assets/winbridge.png $(DESTDIR)$(PIXMAPSDIR)/winbridge-manager.png
+	install -m 644 assets/winbridge-app-launcher.png $(DESTDIR)$(PIXMAPSDIR)/winbridge.png
+	install -m 644 assets/winbridge-manager-icon.png $(DESTDIR)$(PIXMAPSDIR)/winbridge-manager.png
 	@for size in 16 22 24 32 48 64 128 256 512; do \
 		install -d $(DESTDIR)$(DATADIR)/icons/hicolor/$${size}x$${size}/apps; \
 		if [ -f assets/icons/$${size}x$${size}/winbridge.png ]; then \
 			install -m 644 assets/icons/$${size}x$${size}/winbridge.png $(DESTDIR)$(DATADIR)/icons/hicolor/$${size}x$${size}/apps/winbridge.png; \
-			install -m 644 assets/icons/$${size}x$${size}/winbridge.png $(DESTDIR)$(DATADIR)/icons/hicolor/$${size}x$${size}/apps/winbridge-manager.png; \
+			install -m 644 assets/icons/$${size}x$${size}/winbridge-manager.png $(DESTDIR)$(DATADIR)/icons/hicolor/$${size}x$${size}/apps/winbridge-manager.png; \
 		fi; \
 	done
 	install -d $(DESTDIR)$(DOCDIR)
@@ -66,7 +66,8 @@ install: build
 		install -m 755 $(BUILD_DIR)/winbridge $(HOME)/.local/share/winbridge/winbridge; \
 		install -m 755 $(BUILD_DIR)/winbridge-backend $(HOME)/.local/share/winbridge/winbridge-backend; \
 		install -m 755 $(BUILD_DIR)/manager/winbridge-manager $(HOME)/.local/share/winbridge/winbridge-manager; \
-		install -m 644 assets/winbridge.png $(HOME)/.local/share/winbridge/winbridge.png; \
+		install -m 644 assets/winbridge-app-launcher.png $(HOME)/.local/share/winbridge/winbridge.png; \
+		install -m 644 assets/winbridge-manager-icon.png $(HOME)/.local/share/winbridge/winbridge-manager.png; \
 		rm -f $(HOME)/.local/share/winbridge/manager_backend.py $(HOME)/.local/share/winbridge/shortcuts.py $(HOME)/.local/share/winbridge/shared_space.py; \
 		rm -rf $(HOME)/.local/share/winbridge/__pycache__; \
 		printf '#!/usr/bin/env python3\nimport sys, os\nexe = os.path.expanduser("~/.local/share/winbridge/winbridge")\nos.execv(exe, [exe] + sys.argv[1:])\n' > $(HOME)/.local/share/winbridge/winbridge.py; \
