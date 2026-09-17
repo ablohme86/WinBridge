@@ -606,6 +606,15 @@ engine.mkdir(parents=True, exist_ok=True)
             QVERIFY(file.permissions().testFlag(QFileDevice::ExeOwner));
         }
 
+        const QString shortcutWithArgs = createExecutableShortcut(
+            executable, launcher, ShortcutLocation::Desktop, data, desktop, {"-fullscreen", "/switch", "value with spaces"});
+        QFile scArgsFile(shortcutWithArgs);
+        QVERIFY(scArgsFile.open(QIODevice::ReadOnly));
+        const QString scArgsContent = QString::fromUtf8(scArgsFile.readAll());
+        QVERIFY(scArgsContent.contains("-fullscreen"));
+        QVERIFY(scArgsContent.contains("/switch"));
+        QVERIFY(scArgsContent.contains(desktopQuote("value with spaces")));
+
         const QString lnkTarget = tmp.filePath("portable.lnk");
         QFile lnkFile(lnkTarget);
         QVERIFY(lnkFile.open(QIODevice::WriteOnly));

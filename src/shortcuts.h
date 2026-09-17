@@ -49,7 +49,8 @@ QString createExecutableShortcut(
     const QString &launcher,
     ShortcutLocation location,
     const QString &customDataDir = "",
-    const QString &customDesktopDir = ""
+    const QString &customDesktopDir = "",
+    const QStringList &arguments = {}
 );
 
 struct ShortcutInfo {

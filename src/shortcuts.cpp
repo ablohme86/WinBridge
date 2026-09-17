@@ -213,7 +213,8 @@ QString createExecutableShortcut(
     const QString &launcher,
     ShortcutLocation location,
     const QString &customDataDir,
-    const QString &customDesktopDir
+    const QString &customDesktopDir,
+    const QStringList &arguments
 ) {
     QFileInfo exeInfo(exePath);
     const QString suffix = exeInfo.suffix().toLower();
@@ -228,8 +229,12 @@ QString createExecutableShortcut(
         ? QDir::cleanPath(exeInfo.absoluteFilePath())
         : exeInfo.canonicalFilePath();
     const QString name = exeInfo.completeBaseName();
+    QByteArray idData = canonicalExe.toUtf8();
+    if (!arguments.isEmpty()) {
+        idData += '\0' + arguments.join(' ').toUtf8();
+    }
     const QString identity = QString::fromUtf8(QCryptographicHash::hash(
-        canonicalExe.toUtf8(), QCryptographicHash::Sha256).toHex()).left(20);
+        idData, QCryptographicHash::Sha256).toHex()).left(20);
     const QString filename = "winbridge-app-" + identity + ".desktop";
 
     QString data = customDataDir;
@@ -252,6 +257,7 @@ QString createExecutableShortcut(
     QStringList command;
     if (launcher.endsWith(".py")) command << "/usr/bin/python3";
     command << launcher << "--" << canonicalExe;
+    command.append(arguments);
     QStringList quotedCommand;
     for (const QString &part : command) quotedCommand << desktopQuote(part);
 

@@ -124,6 +124,7 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
             if (parser.isSet(screenshotOpt)) return request.screenshotSaved ? 0 : 1;
             if (!request.accepted) return 0;
             exePath = request.executable;
+            extraArgs = request.arguments;
         } else {
             exePath = positional.first();
             extraArgs = positional.mid(1);
@@ -157,16 +158,14 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
         if (chosenProton.isEmpty()) return 0;
         rememberExecutable(exePath);
 
-        return launch(
+        return launchWithLoadingDialog(
             exePath,
             chosenProton,
             roots,
             libs,
             extraArgs,
             parser.value(prefixOpt),
-            false,
-            "run",
-            nullptr,
+            parser.value(themeOpt),
             QCoreApplication::applicationFilePath()
         );
     } catch (const std::exception &exc) {
@@ -176,9 +175,8 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
 }
 
 int main(int argc, char **argv) {
-    // Use Widgets only when no executable or command action was supplied. This
-    // keeps terminal commands and file-manager launches independent of a GUI.
     bool graphicalOpener = true;
+    bool isCommandAction = false;
     const QStringList commandActions = {
         "--help", "-h", "--version", "-v", "--list", "--configure",
         "--import-shortcuts", "--install-proton"
@@ -191,6 +189,7 @@ int main(int argc, char **argv) {
             continue;
         }
         if (commandActions.contains(argument) || argument.startsWith("--install-proton=")) {
+            isCommandAction = true;
             graphicalOpener = false;
             break;
         }
@@ -210,6 +209,7 @@ int main(int argc, char **argv) {
             break;
         }
     }
+    const bool hasDisplay = !qEnvironmentVariable("DISPLAY").isEmpty() || !qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty();
     if (graphicalOpener) {
         QApplication app(argc, argv);
         app.setDesktopFileName("winbridge");
@@ -220,6 +220,11 @@ int main(int argc, char **argv) {
         }
         if (!screenshot && activateRunningInstance("launcher", qEnvironmentVariable("XDG_ACTIVATION_TOKEN"))) return 0;
         return runWinBridge(app, true);
+    }
+    if (hasDisplay && !isCommandAction) {
+        QApplication app(argc, argv);
+        app.setDesktopFileName("winbridge");
+        return runWinBridge(app, false);
     }
     QCoreApplication app(argc, argv);
     return runWinBridge(app, false);
