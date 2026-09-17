@@ -24,7 +24,7 @@ static QString normalizedExecutable(const QString &path) {
     if (expanded.startsWith("~/")) expanded = QDir::homePath() + expanded.mid(1);
     QFileInfo info(expanded);
     const QString suffix = info.suffix().toLower();
-    if (!info.isFile() || (suffix != "exe" && suffix != "lnk")) return {};
+    if (!info.isFile() || suffix != "exe") return {};
     const QString canonical = info.canonicalFilePath();
     return canonical.isEmpty() ? QDir::cleanPath(info.absoluteFilePath()) : canonical;
 }
@@ -144,7 +144,7 @@ public:
         auto *intro = new QLabel(tr("Open a Windows app"));
         intro->setObjectName("heading");
         content->addWidget(intro);
-        auto *introText = new QLabel(tr("Choose an .exe or .lnk file to run with your shared WinBridge environment."));
+        auto *introText = new QLabel(tr("Choose an .exe file to run with your shared WinBridge environment."));
         introText->setObjectName("muted");
         introText->setWordWrap(true);
         content->addWidget(introText);
@@ -224,7 +224,7 @@ public:
             const QString current = normalizedExecutable(pathEdit->text());
             const QString start = current.isEmpty() ? QDir::homePath() : QFileInfo(current).dir().absolutePath();
             const QString selected = QFileDialog::getOpenFileName(this, tr("Choose a Windows app"), start,
-                tr("Windows apps (*.exe *.EXE *.lnk *.LNK);;All files (*)"));
+                tr("Windows apps (*.exe *.EXE);;All files (*)"));
             if (!selected.isEmpty()) pathEdit->setText(selected);
         });
         connect(pathEdit, &QLineEdit::textChanged, this, [this] { updateSelection(); });
@@ -341,7 +341,7 @@ private:
     void openSelected() {
         const QString valid = normalizedExecutable(pathEdit->text());
         if (valid.isEmpty()) {
-            status->setText(tr("Choose an existing .exe or .lnk file."));
+            status->setText(tr("Choose an existing .exe file."));
             return;
         }
         selectedExecutable = valid;

@@ -39,6 +39,20 @@ private slots:
         QCOMPARE(recentExecutables(storage), QStringList({first, second}));
         QVERIFY(QFile::remove(first));
         QCOMPARE(recentExecutables(storage), QStringList({second}));
+
+        const QString shortcut = tmp.filePath("Shortcut.lnk");
+        QFile scFile(shortcut);
+        QVERIFY(scFile.open(QIODevice::WriteOnly));
+        scFile.write("shortcut");
+        scFile.close();
+        QVERIFY(!rememberExecutable(shortcut, storage));
+        QCOMPARE(recentExecutables(storage), QStringList({second}));
+
+        QFile jsonFile(storage);
+        QVERIFY(jsonFile.open(QIODevice::WriteOnly));
+        jsonFile.write(QJsonDocument(QJsonArray{shortcut, second}).toJson());
+        jsonFile.close();
+        QCOMPARE(recentExecutables(storage), QStringList({second}));
     }
 
     void managerIsFoundBesideLauncher() {

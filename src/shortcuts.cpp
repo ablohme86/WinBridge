@@ -217,8 +217,8 @@ QString createExecutableShortcut(
 ) {
     QFileInfo exeInfo(exePath);
     const QString suffix = exeInfo.suffix().toLower();
-    if (!exeInfo.isFile() || (suffix != "exe" && suffix != "lnk")) {
-        throw std::runtime_error("Select an existing .exe or .lnk file.");
+    if (!exeInfo.isFile() || suffix != "exe") {
+        throw std::runtime_error("Select an existing .exe file.");
     }
     if (launcher.trimmed().isEmpty()) {
         throw std::runtime_error("Could not locate the WinBridge launcher.");

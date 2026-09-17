@@ -605,6 +605,15 @@ engine.mkdir(parents=True, exist_ok=True)
             QVERIFY(content.contains(desktopQuote(executable).toUtf8()));
             QVERIFY(file.permissions().testFlag(QFileDevice::ExeOwner));
         }
+
+        const QString lnkTarget = tmp.filePath("portable.lnk");
+        QFile lnkFile(lnkTarget);
+        QVERIFY(lnkFile.open(QIODevice::WriteOnly));
+        lnkFile.close();
+        QVERIFY_EXCEPTION_THROWN(
+            createExecutableShortcut(lnkTarget, launcher, ShortcutLocation::Desktop, data, desktop),
+            std::runtime_error
+        );
     }
 };
 
