@@ -430,6 +430,37 @@ engine.mkdir(parents=True, exist_ok=True)
         QCOMPARE(running["sc_key"][1], qint64(1001));
     }
 
+    void killAllTasksStopsEveryPrefixApp() {
+        QTemporaryDir tmp;
+        const QString pfx = tmp.path() + "/prefix";
+        const QString procRoot = tmp.path() + "/proc";
+        QProcess first, second;
+        first.start("sleep", {"30"});
+        second.start("sleep", {"30"});
+        QVERIFY(first.waitForStarted() && second.waitForStarted());
+        const QList<QPair<qint64, QByteArray>> apps = {{first.processId(), "C:\\Apps\\one.exe"},
+                                                       {second.processId(), "Z:\\home\\two.exe"}};
+        for (const auto &app : apps) {
+            const QString dir = procRoot + "/" + QString::number(app.first);
+            QVERIFY(QDir().mkpath(dir));
+            QFile env(dir + "/environ");
+            QVERIFY(env.open(QIODevice::WriteOnly));
+            env.write("STEAM_COMPAT_DATA_PATH=" + pfx.toUtf8() + '\0');
+            env.close();
+            QFile cmd(dir + "/cmdline");
+            QVERIFY(cmd.open(QIODevice::WriteOnly));
+            cmd.write(app.second + '\0');
+            cmd.close();
+        }
+
+        const QJsonObject result = killAllTasks(pfx, procRoot);
+        QVERIFY(result["killed"].toBool());
+        QCOMPARE(result["pids"].toArray().size(), 2);
+        QVERIFY(first.waitForFinished(2000));
+        QVERIFY(second.waitForFinished(2000));
+        QVERIFY(!killAllTasks(pfx, tmp.path() + "/empty")["killed"].toBool());
+    }
+
     void testShortcutsConfigAndToggle() {
         QTemporaryDir tmp;
         qputenv("XDG_CONFIG_HOME", tmp.path().toUtf8());

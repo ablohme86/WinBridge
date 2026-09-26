@@ -165,6 +165,10 @@ static QIcon resolveIcon() {
     return QIcon::fromTheme("winbridge");
 }
 
+QIcon launcherIcon() {
+    return resolveIcon();
+}
+
 static QIcon resolveManagerIcon() {
     const QString appDir = QCoreApplication::applicationDirPath();
     const QStringList candidates = {

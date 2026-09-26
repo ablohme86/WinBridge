@@ -22,7 +22,7 @@ add_library(winbridge_core STATIC
 )
 target_link_libraries(winbridge_core PUBLIC Qt6::Core Qt6::Gui)
 
-add_executable(winbridge src/winbridge_main.cpp src/opener.cpp src/single_instance.cpp)
+add_executable(winbridge src/winbridge_main.cpp src/opener.cpp src/single_instance.cpp src/tray.cpp)
 target_link_libraries(winbridge PRIVATE winbridge_core Qt6::Core Qt6::Widgets Qt6::Network)
 if(TARGET KF6::WindowSystem)
     target_link_libraries(winbridge PRIVATE KF6::WindowSystem)

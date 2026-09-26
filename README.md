@@ -19,11 +19,18 @@ Once an app is selected, **Make Shortcut** can add it directly to the Linux Desk
 | --- | --- |
 | ![WinBridge app launcher in Classic Light](assets/winbridge-launcher.png) | ![WinBridge app launcher in Retro Dark](assets/winbridge-launcher-dark.png) |
 
+## Running apps in the system tray
+
+While one or more Windows apps are running, WinBridge shows its icon in the system tray. Click or right-click the icon to see every running app with its original icon. Select an app to bring its window to the foreground, restoring it if it is minimized. **Kill All** at the bottom of the menu closes every running app in the shared environment after you confirm. Unsaved work in those apps is lost. The icon disappears automatically a few seconds after the last app closes.
+
+Bringing a window to the foreground works for apps that run through X11, including XWayland on Wayland sessions, which Proton uses by default.
+
 For installation, build instructions, and configuration, see [INSTALL.md](INSTALL.md).
 
 ## What WinBridge does
 
 - **Run Windows programs:** Open `.exe` files from KDE, GNOME, or another desktop environment. Choose Proton once and reuse that choice on later launches.
+- **Switch between running apps:** Bring any running app to the foreground or close them all from the WinBridge tray icon.
 - **Launch from one place:** Open WinBridge without a file to enter or browse for an executable, reopen a recent app, or create a Desktop or Start Menu shortcut for it.
 - **Run without Steam:** Download GE-Proton or UMU-Proton and its runtime from Settings using UMU.
 - **Find your Proton versions:** Discover downloaded builds, Proton in Steam libraries, and custom builds such as GE-Proton.

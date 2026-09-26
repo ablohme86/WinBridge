@@ -40,7 +40,7 @@ make
 make install-user
 ```
 
-This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. Run `sudo make install` to install system-wide to `/usr/local`.
+This builds all native executables, installs WinBridge to `~/.local/bin`, adds **WinBridge** and **WinBridge Manager** to the application menu, and makes WinBridge your default `.exe` handler. To install system-wide to `/usr/local`, run `make` as your normal user first and then `sudo make install`; the root install only copies the finished build and never compiles.
 
 Both `make install` and `make install-user` register `.exe` associations through XDG and, when available, GIO for Nemo, Nautilus (Files), Caja, Thunar, PCManFM and Dolphin. With `sudo make install`, associations are configured for the user who invoked sudo. A root installation without `SUDO_USER` only installs the application; run `make install-user` from your desktop account to set your defaults. Package staging with `DESTDIR` does not change user associations.
 

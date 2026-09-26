@@ -206,6 +206,16 @@ QJsonObject killTask(const QString &prefix, const QString &taskId, const QString
     return QJsonObject{{"killed", false}, {"id", taskId}, {"error", "Task is not running."}};
 }
 
+QJsonObject killAllTasks(const QString &prefix, const QString &procRoot) {
+    QJsonArray pids;
+    for (const auto &value : getRunningTasks(prefix, procRoot))
+        for (const auto &pid : value.toObject().value("pids").toArray()) pids.append(pid);
+    for (const auto &pid : pids) ::kill(pid.toInteger(), SIGTERM);
+    if (!pids.isEmpty()) QThread::msleep(100);
+    for (const auto &pid : pids) ::kill(pid.toInteger(), SIGKILL);
+    return QJsonObject{{"killed", !pids.isEmpty()}, {"pids", pids}};
+}
+
 QMap<QString, QList<qint64>> getRunningApps(
     const QString &prefix,
     const QJsonArray &programsInput,
