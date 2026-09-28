@@ -57,6 +57,7 @@
     "Continue": "Fortsett",
     "Saving settings …": "Lagrer innstillinger …",
     "Saved version is no longer installed. Please choose another version.": "Den lagrede versjonen er ikke lenger installert. Velg en annen versjon.",
+    "No installed Proton versions found. Please install Proton first.": "Fant ingen installerte Proton-versjoner. Installer Proton først.",
     "Windows environment does not exist yet.": "Windows-miljøet finnes ikke ennå.",
     "Select an installed Proton version in Settings first.": "Velg en installert Proton-versjon i Innstillinger først.",
     "The app no longer exists, or its ID is ambiguous. Refresh the library.": "Programmet finnes ikke lenger, eller ID-en er tvetydig. Oppdater listen.",

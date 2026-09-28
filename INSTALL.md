@@ -52,14 +52,14 @@ The user launcher uses the installed executable's absolute path, so it also work
 
 Install [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher#packaging) using your distribution's package or the upstream installation instructions. WinBridge finds `umu-run` on `PATH` or in `~/.local/bin`. Building WinBridge does not install UMU. On Debian and Fedora, check upstream's distribution instructions if your repositories do not provide `umu-launcher`.
 
+Make sure you have a Proton version installed beforehand (e.g. via Steam, ProtonUp-Qt, or UMU).
+
 1. Open **WinBridge Manager → Settings**.
-2. Choose **GE-Proton** or **UMU-Proton** beside **Download Proton**, then click the button.
-3. Wait for Proton and its matching Steam Linux Runtime to download and be checked. This requires internet access and may take several minutes. Setup uses a temporary Windows environment and leaves your shared environment untouched.
-4. Select a Proton version and click **Save changes**.
+2. Select an installed Proton version from the list and click **Save changes**.
 
-GE-Proton includes additional compatibility patches. UMU-Proton is based on Valve's Proton with UMU compatibility changes. Neither requires the Steam client. UMU handles download verification, extraction, and runtime updates.
+GE-Proton includes additional compatibility patches. UMU-Proton is based on Valve's Proton with UMU compatibility changes. Neither requires the Steam client. UMU handles download verification, extraction, and runtime updates when managed through UMU.
 
-The **automatic download** choices check for Proton updates at launch. Select a specific installed version in the same list to keep using that build. Close Windows apps before changing versions. A failed download leaves your settings unchanged; retry with **Download Proton**. If UMU can use an already installed build after a network failure, setup can succeed with that build.
+Existing Proton installations remain discoverable, including Steam libraries and custom directories. Select a specific installed version in the list to use that build. Close Windows apps before changing versions.
 
 You can also prepare downloads from a terminal:
 

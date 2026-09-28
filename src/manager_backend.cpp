@@ -542,7 +542,7 @@ QJsonObject operate(
     if (action == "settings" || action == "configure") {
         QStringList roots = steamRoots();
         QStringList libs = steamLibraries(roots);
-        QStringList versions = protonChoices(roots, libs);
+        QStringList versions = discoverProtons(roots, libs);
 
         if (action == "configure") {
             SettingsLock lock;
@@ -587,7 +587,7 @@ QJsonObject operate(
         }
 
         QString savedProton = settings.value("proton").toString();
-        if (!savedProton.isEmpty() && isProtonAvailable(savedProton) && !versions.contains(savedProton)) {
+        if (!savedProton.isEmpty() && !isProtonDownload(savedProton) && isProtonAvailable(savedProton) && !versions.contains(savedProton)) {
             versions.append(savedProton);
         }
         QJsonArray versionArr;
