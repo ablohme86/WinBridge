@@ -57,6 +57,7 @@
     "Continue": "Continue",
     "Saving settings …": "Saving settings …",
     "Saved version is no longer installed. Please choose another version.": "Saved version is no longer installed. Please choose another version.",
+    "No installed Proton versions found. Please install Proton first.": "No installed Proton versions found. Please install Proton first.",
     "Windows environment does not exist yet.": "Windows environment does not exist yet.",
     "Select an installed Proton version in Settings first.": "Select an installed Proton version in Settings first.",
     "The app no longer exists, or its ID is ambiguous. Refresh the library.": "The app no longer exists, or its ID is ambiguous. Refresh the library.",

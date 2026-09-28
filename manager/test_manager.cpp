@@ -69,46 +69,63 @@ private slots:
         QVERIFY(QDir().rmdir(installPath));recorder.opened=QUrl();
         files->click();QVERIFY(recorder.opened.isEmpty());
     }
-    void protonDownloadPreservesEditsAndRecoversFromFailure() {
+    void settingsListsInstalledProtonsWithoutAutoDownload() {
         QTemporaryDir dir;
-        QString script=dir.filePath("backend.py");
-        QFile f(script);QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"PY(import json,sys,time
+        QString script = dir.filePath("backend.py"), calls = dir.filePath("calls");
+        QFile f(script); QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write((R"PY(import json,sys
 from pathlib import Path
-data={'selected':'','prefix':'/original','umu_available':True,'versions':[{'name':'GE-Proton (automatic download)','path':'GE-Proton'},{'name':'UMU-Proton (automatic download)','path':'UMU-Proton'}]}
-if sys.argv[1]=='install_proton':
-    time.sleep(0.1)
-    assert sys.argv[2:] == ['--proton','GE-Proton']
-    marker=Path(__file__).with_suffix('.attempt')
-    if not marker.exists():
-        marker.touch()
-        print(json.dumps({'error':'Download failed. Log: /tmp/download.log'}))
-        sys.exit(1)
-    data['versions'].append({'name':'GE-Proton10-1','path':'/downloaded/GE-Proton10-1'})
+p=Path(r')PY" + calls + R"PY(')
+if len(sys.argv) > 1 and sys.argv[1] == 'configure':
+    p.write_text((p.read_text() if p.exists() else '') + ' '.join(sys.argv[1:]) + '\n')
+data = {
+    'selected': '/installed/Proton9',
+    'prefix': '/original',
+    'umu_available': True,
+    'versions': [
+        {'name': 'GE-Proton9', 'path': '/installed/GE-Proton9'},
+        {'name': 'Proton 9.0', 'path': '/installed/Proton9'}
+    ]
+}
 print(json.dumps(data))
-)PY");f.close();
-        SettingsDialog dialog(script);dialog.show();
-        auto *download=dialog.findChild<QPushButton*>("downloadProton");
-        auto *save=dialog.findChild<QPushButton*>("primary");
-        auto *prefix=dialog.findChild<QLineEdit*>("prefix");
-        auto *proton=dialog.findChild<QComboBox*>("proton");
-        auto *progress=dialog.findChild<QProgressBar*>("downloadProgress");
-        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
-        prefix->setText("/unsaved prefix");
-        download->click();
-        QVERIFY(progress->isVisible());QVERIFY(!save->isEnabled());QVERIFY(!download->isEnabled());
-        dialog.reject();QVERIFY(dialog.isVisible());
-        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
-        QVERIFY(!progress->isVisible());QVERIFY(save->isEnabled());
-        QCOMPARE(prefix->text(),QString("/unsaved prefix"));
-        QCOMPARE(proton->count(),3);
-        download->click();
-        QTRY_VERIFY_WITH_TIMEOUT(download->isEnabled(),5000);
-        QCOMPARE(prefix->text(),QString("/unsaved prefix"));
-        QCOMPARE(proton->count(),4);
-        QCOMPARE(proton->currentData().toString(),QString("GE-Proton"));
-        QVERIFY(!progress->isVisible());QVERIFY(dialog.isVisible());
-        dialog.reject();QVERIFY(!dialog.isVisible());
+)PY").toUtf8());
+        f.close();
+
+        SettingsDialog dialog(script); dialog.show();
+        QVERIFY(dialog.findChild<QPushButton*>("downloadProton") == nullptr);
+        QVERIFY(dialog.findChild<QComboBox*>("downloadVersion") == nullptr);
+        QVERIFY(dialog.findChild<QProgressBar*>("downloadProgress") == nullptr);
+
+        auto *save = dialog.findChild<QPushButton*>("primary");
+        auto *proton = dialog.findChild<QComboBox*>("proton");
+        QTRY_VERIFY_WITH_TIMEOUT(save->isEnabled(), 5000);
+        // "Keep current version" + 2 installed versions = 3 items
+        QCOMPARE(proton->count(), 3);
+        QCOMPARE(proton->currentData().toString(), QString("/installed/Proton9"));
+
+        // Select GE-Proton9 and save
+        proton->setCurrentIndex(1);
+        QCOMPARE(proton->currentData().toString(), QString("/installed/GE-Proton9"));
+
+        QTimer::singleShot(20, [] {
+            auto *box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (box) {
+                for (auto *b : box->buttons()) {
+                    if (box->buttonRole(b) == QMessageBox::AcceptRole) {
+                        b->click();
+                        break;
+                    }
+                }
+            }
+        });
+        save->click();
+        QTRY_COMPARE_WITH_TIMEOUT(dialog.result(), int(QDialog::Accepted), 5000);
+
+        QFile callFile(calls);
+        QVERIFY(callFile.open(QIODevice::ReadOnly));
+        QString recorded = QString::fromUtf8(callFile.readAll());
+        QVERIFY(recorded.contains("configure"));
+        QVERIFY(recorded.contains("--proton /installed/GE-Proton9"));
     }
     void programIconAndFallback() {
         QTemporaryDir dir;

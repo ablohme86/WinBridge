@@ -24,7 +24,7 @@ BUILD_DIR ?= build
 CMAKE ?= cmake
 CTEST ?= ctest
 
-.PHONY: all build test install install-user uninstall clean help
+.PHONY: all build check-build test install install-user uninstall clean help
 
 all: build
 
@@ -37,7 +37,23 @@ test:
 	$(CMAKE) --build $(BUILD_DIR) --parallel
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
 
-install: build
+# Building as root leaves root-owned files in the build directory, which break
+# the next regular `make`. As root, install only copies an existing build.
+ifeq ($(shell id -u),0)
+INSTALL_DEPS := check-build
+else
+INSTALL_DEPS := build
+endif
+
+check-build:
+	@for binary in winbridge winbridge-backend manager/winbridge-manager; do \
+		if [ ! -x "$(BUILD_DIR)/$$binary" ]; then \
+			echo "$(BUILD_DIR)/$$binary is missing. Run 'make' as your normal user before 'sudo make install'." >&2; \
+			exit 1; \
+		fi; \
+	done
+
+install: $(INSTALL_DEPS)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(BUILD_DIR)/winbridge $(DESTDIR)$(BINDIR)/winbridge
 	install -m 755 $(BUILD_DIR)/winbridge-backend $(DESTDIR)$(BINDIR)/winbridge-backend

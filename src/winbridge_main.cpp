@@ -21,6 +21,7 @@
 #include "launcher.h"
 #include "opener.h"
 #include "single_instance.h"
+#include "tray.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -62,6 +63,8 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
     parser.addOption(screenshotOpt);
     QCommandLineOption themeOpt("theme", "App opener theme: classic or dark", "theme");
     parser.addOption(themeOpt);
+    QCommandLineOption trayOpt("tray", "Show a tray icon for running apps until they exit");
+    parser.addOption(trayOpt);
 
     parser.addPositionalArgument("exe", "Windows executable (.exe or .lnk) to run", "[exe]");
     parser.addPositionalArgument("arguments", "Arguments passed to the executable", "[arguments...]");
@@ -78,6 +81,8 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
         }
         return 0;
     }
+
+    if (parser.isSet(trayOpt)) return runTray(parser.value(prefixOpt));
 
     try {
         if (parser.isSet(installOpt)) {
@@ -157,6 +162,11 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
 
         if (chosenProton.isEmpty()) return 0;
         rememberExecutable(exePath);
+        if (qobject_cast<QApplication*>(QCoreApplication::instance())) {
+            QStringList trayArgs{"--tray"};
+            if (parser.isSet(prefixOpt)) trayArgs << "--prefix" << parser.value(prefixOpt);
+            QProcess::startDetached(QCoreApplication::applicationFilePath(), trayArgs);
+        }
 
         return launchWithLoadingDialog(
             exePath,
@@ -200,6 +210,10 @@ int main(int argc, char **argv) {
         }
         if (argument.startsWith("--proton=") || argument.startsWith("--prefix=") ||
             argument.startsWith("--screenshot=") || argument.startsWith("--theme=")) continue;
+        if (argument == "--tray") {
+            graphicalOpener = false;
+            break;
+        }
         if (argument == "--") {
             if (i + 1 < argc) graphicalOpener = false;
             break;

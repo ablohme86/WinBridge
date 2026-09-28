@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QIcon>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -20,6 +21,7 @@ QStringList recentExecutables(const QString &customPath = "");
 bool rememberExecutable(const QString &exePath, const QString &customPath = "");
 bool removeRecentExecutable(const QString &exePath, const QString &customPath = "");
 QString managerExecutablePath(const QString &launcherPath = "");
+QIcon launcherIcon();
 QStringList parseArguments(const QString &argsText);
 
 struct OpenRequest {

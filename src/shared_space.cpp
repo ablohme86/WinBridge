@@ -203,7 +203,7 @@ QString selectProton(
     }
 
     if (versions.isEmpty()) {
-        throw std::runtime_error("Fant ingen Proton-versjoner. Last ned Proton i innstillingene til WinBridge Manager.");
+        throw std::runtime_error("Fant ingen installerte Proton-versjoner. Installer Proton først.");
     }
 
     QString selected = chooser(versions);
