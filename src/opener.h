@@ -30,6 +30,7 @@ struct OpenRequest {
     QString executable;
     QString argumentsText;
     QStringList arguments;
+    bool sandbox = false;
 };
 
 OpenRequest showExecutableOpener(

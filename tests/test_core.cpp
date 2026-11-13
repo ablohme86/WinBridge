@@ -25,6 +25,7 @@
 #include "shortcuts.h"
 #include "manager_backend.h"
 #include "launcher.h"
+#include "sandbox.h"
 
 using namespace WinBridge;
 
@@ -602,6 +603,58 @@ engine.mkdir(parents=True, exist_ok=True)
         QCOMPARE(appDir.entryList({"winbridge-*.desktop"}, QDir::Files).size(), 0);
         QDir deskDir(customDesktop);
         QCOMPARE(deskDir.entryList({"winbridge-*.desktop"}, QDir::Files).size(), 0);
+    }
+
+    void sandboxesAreIsolatedAndCleanedWhenIdle() {
+        QTemporaryDir home;
+        QVERIFY(home.isValid());
+        ScopedEnvironment env;
+        env.set("XDG_DATA_HOME", (home.path() + "/data").toUtf8());
+
+        const QString sandbox = createSandbox("/apps/setup.exe");
+        QVERIFY(isSandboxPrefix(sandbox));
+        QVERIFY(QDir(sandbox + "/pfx").exists());
+        QVERIFY(sandbox.startsWith(QFileInfo(sandboxesDir()).canonicalFilePath() + "/"));
+        QVERIFY(!isSandboxPrefix(sharedPrefix()));
+        QVERIFY(createSandbox("/apps/setup.exe") != sandbox);
+
+        // A directory without the marker is never treated as a sandbox.
+        QVERIFY(QDir().mkpath(sandboxesDir() + "/unmarked/pfx"));
+        QVERIFY(!isSandboxPrefix(sandboxesDir() + "/unmarked"));
+
+        // Data outside the sandbox that is reachable through a symlink must survive.
+        const QString outside = home.path() + "/outside";
+        QVERIFY(QDir().mkpath(outside));
+        QFile keep(outside + "/keep.txt");
+        QVERIFY(keep.open(QIODevice::WriteOnly));
+        keep.write("keep");
+        keep.close();
+        QVERIFY(QDir().mkpath(sandbox + "/pfx/dosdevices"));
+        QVERIFY(QFile::link(outside, sandbox + "/pfx/dosdevices/z:"));
+
+        QTemporaryDir proc;
+        QVERIFY(QDir().mkpath(proc.path() + "/4242"));
+        QFile environ(proc.path() + "/4242/environ");
+        QVERIFY(environ.open(QIODevice::WriteOnly));
+        environ.write(QByteArray("HOME=/x\0STEAM_COMPAT_DATA_PATH=", 31) + sandbox.toUtf8() + QByteArray("\0", 1));
+        environ.close();
+
+        const QDateTime later = QDateTime::currentDateTime().addSecs(sandboxIdleSeconds + 60);
+        QVERIFY(isSandboxInUse(sandbox, proc.path()));
+        QVERIFY(!cleanupSandboxes(sandboxIdleSeconds, proc.path(), later).contains(sandbox));
+        QVERIFY(QDir(sandbox).exists());
+        QCOMPARE(existingSandboxes(), QStringList{sandbox}); // The idle second sandbox is gone.
+
+        QTemporaryDir emptyProc;
+        QVERIFY(!isSandboxInUse(sandbox, emptyProc.path()));
+        touchSandbox(sandbox);
+        QVERIFY(cleanupSandboxes(sandboxIdleSeconds, emptyProc.path()).isEmpty());
+        const QStringList removed = cleanupSandboxes(sandboxIdleSeconds, emptyProc.path(), later);
+        QCOMPARE(removed, QStringList{sandbox});
+        QVERIFY(!QDir(sandbox).exists());
+        QVERIFY(QFile::exists(outside + "/keep.txt"));
+        QVERIFY(QDir(sandboxesDir() + "/unmarked").exists());
+        QVERIFY(existingSandboxes().isEmpty());
     }
 
     void createPortableExecutableShortcuts() {

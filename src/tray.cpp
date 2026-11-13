@@ -7,6 +7,7 @@
 #include "tray.h"
 #include "manager_backend.h"
 #include "opener.h"
+#include "sandbox.h"
 #include "shared_space.h"
 #include "single_instance.h"
 
@@ -140,8 +141,9 @@ private:
         }
         seenTasks = true;
         emptyPolls = 0;
-        tray.setToolTip(tasks.size() == 1 ? tr("WinBridge – 1 app running")
-                                          : tr("WinBridge – %1 apps running").arg(tasks.size()));
+        const QString label = isSandboxPrefix(prefix) ? tr("WinBridge sandbox") : tr("WinBridge");
+        tray.setToolTip(tasks.size() == 1 ? tr("%1 – 1 app running").arg(label)
+                                          : tr("%1 – %2 apps running").arg(label).arg(tasks.size()));
         tray.show();
         if (!menu.isVisible()) rebuildMenu();
     }
