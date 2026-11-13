@@ -20,6 +20,7 @@
 #include "shortcuts.h"
 #include "launcher.h"
 #include "opener.h"
+#include "sandbox.h"
 #include "single_instance.h"
 #include "tray.h"
 
@@ -65,6 +66,10 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
     parser.addOption(themeOpt);
     QCommandLineOption trayOpt("tray", "Show a tray icon for running apps until they exit");
     parser.addOption(trayOpt);
+    QCommandLineOption sandboxOpt("sandbox", "Run in a temporary Windows environment that is deleted after 10 idle minutes");
+    parser.addOption(sandboxOpt);
+    QCommandLineOption cleanupOpt("cleanup-sandboxes", "Remove idle sandboxes, waiting until all are gone");
+    parser.addOption(cleanupOpt);
 
     parser.addPositionalArgument("exe", "Windows executable (.exe or .lnk) to run", "[exe]");
     parser.addPositionalArgument("arguments", "Arguments passed to the executable", "[arguments...]");
@@ -83,6 +88,7 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
     }
 
     if (parser.isSet(trayOpt)) return runTray(parser.value(prefixOpt));
+    if (parser.isSet(cleanupOpt)) return runSandboxCleanup();
 
     try {
         if (parser.isSet(installOpt)) {
@@ -117,9 +123,16 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
             return 0;
         }
 
+        if (parser.isSet(sandboxOpt) && parser.isSet(prefixOpt)) {
+            throw std::runtime_error("--sandbox cannot be combined with --prefix.");
+        }
+        // Also covers sandboxes left behind by a crash or a reboot.
+        ensureSandboxCleanup(QCoreApplication::applicationFilePath());
+
         const QStringList positional = parser.positionalArguments();
         QString exePath;
         QStringList extraArgs;
+        bool sandboxed = parser.isSet(sandboxOpt);
 
         if (positional.isEmpty()) {
             if (!showOpener) return 0;
@@ -130,6 +143,7 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
             if (!request.accepted) return 0;
             exePath = request.executable;
             extraArgs = request.arguments;
+            sandboxed = sandboxed || request.sandbox;
         } else {
             exePath = positional.first();
             extraArgs = positional.mid(1);
@@ -162,9 +176,14 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
 
         if (chosenProton.isEmpty()) return 0;
         rememberExecutable(exePath);
+        QString prefix = parser.value(prefixOpt);
+        if (sandboxed) {
+            prefix = createSandbox(exePath);
+            ensureSandboxCleanup(QCoreApplication::applicationFilePath());
+        }
         if (qobject_cast<QApplication*>(QCoreApplication::instance())) {
             QStringList trayArgs{"--tray"};
-            if (parser.isSet(prefixOpt)) trayArgs << "--prefix" << parser.value(prefixOpt);
+            if (!prefix.isEmpty()) trayArgs << "--prefix" << prefix;
             QProcess::startDetached(QCoreApplication::applicationFilePath(), trayArgs);
         }
 
@@ -174,7 +193,7 @@ static int runWinBridge(QCoreApplication &app, bool showOpener) {
             roots,
             libs,
             extraArgs,
-            parser.value(prefixOpt),
+            prefix,
             parser.value(themeOpt),
             QCoreApplication::applicationFilePath()
         );
@@ -189,7 +208,7 @@ int main(int argc, char **argv) {
     bool isCommandAction = false;
     const QStringList commandActions = {
         "--help", "-h", "--version", "-v", "--list", "--configure",
-        "--import-shortcuts", "--install-proton"
+        "--import-shortcuts", "--install-proton", "--cleanup-sandboxes"
     };
     bool consumeValue = false;
     for (int i = 1; i < argc; ++i) {

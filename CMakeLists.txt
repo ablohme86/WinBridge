@@ -19,6 +19,7 @@ add_library(winbridge_core STATIC
     src/shortcuts.cpp
     src/launcher.cpp
     src/manager_backend.cpp
+    src/sandbox.cpp
 )
 target_link_libraries(winbridge_core PUBLIC Qt6::Core Qt6::Gui)
 

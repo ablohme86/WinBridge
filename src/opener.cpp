@@ -337,6 +337,14 @@ public:
         argsEdit->setVisible(false);
         content->addWidget(argsEdit);
 
+        sandboxCheck = new QCheckBox(tr("Run in sandbox"));
+        sandboxCheck->setObjectName("sandboxCheck");
+        sandboxCheck->setCursor(Qt::PointingHandCursor);
+        sandboxCheck->setToolTip(tr("Run the app in a temporary Windows environment that does not change "
+                                    "your shared WinBridge environment. It is deleted when no app has run "
+                                    "in it for 10 minutes."));
+        content->addWidget(sandboxCheck);
+
         auto *recentHeader = new QHBoxLayout;
         auto *recentTitle = new QLabel(tr("Recently opened apps"));
         recentTitle->setObjectName("sectionLabel");
@@ -409,6 +417,7 @@ public:
             updateSelection();
         });
         connect(argsEdit, &QLineEdit::textChanged, this, [this] { updateSelection(); });
+        connect(sandboxCheck, &QCheckBox::toggled, this, [this] { updateSelection(); });
         connect(argsEdit, &QLineEdit::returnPressed, this, [this] { openSelected(); });
         connect(list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item) {
             if (item) pathEdit->setText(item->data(Qt::UserRole).toString());
@@ -444,7 +453,8 @@ public:
         setTabOrder(pathEdit, browse);
         setTabOrder(browse, argsCheck);
         setTabOrder(argsCheck, argsEdit);
-        setTabOrder(argsEdit, list);
+        setTabOrder(argsEdit, sandboxCheck);
+        setTabOrder(sandboxCheck, list);
         setTabOrder(list, shortcutButton);
         setTabOrder(shortcutButton, cancel);
         setTabOrder(cancel, openButton);
@@ -459,6 +469,7 @@ public:
     QString executable() const { return selectedExecutable; }
     QStringList arguments() const { return selectedArguments; }
     QString argumentsText() const { return selectedArgumentsText; }
+    bool sandbox() const { return selectedSandbox; }
 
 private:
     QString launcherPath;
@@ -466,9 +477,11 @@ private:
     QString selectedExecutable;
     QStringList selectedArguments;
     QString selectedArgumentsText;
+    bool selectedSandbox = false;
     QLineEdit *pathEdit = nullptr;
     QCheckBox *argsCheck = nullptr;
     QLineEdit *argsEdit = nullptr;
+    QCheckBox *sandboxCheck = nullptr;
     QListWidget *list = nullptr;
     QLabel *emptyLabel = nullptr;
     QLabel *status = nullptr;
@@ -512,7 +525,10 @@ private:
         } else {
             const bool hasArgs = argsCheck && argsCheck->isChecked() && argsEdit && !argsEdit->text().trimmed().isEmpty();
             const QString args = hasArgs ? argsEdit->text().trimmed() : QString();
-            status->setText(args.isEmpty() ? valid : QString("%1 %2").arg(valid, args));
+            const QString command = args.isEmpty() ? valid : QString("%1 %2").arg(valid, args);
+            status->setText(sandboxCheck && sandboxCheck->isChecked()
+                ? tr("%1\nRuns in a temporary sandbox, deleted 10 minutes after the app closes.").arg(command)
+                : command);
         }
     }
 
@@ -526,6 +542,7 @@ private:
         const bool useArgs = argsCheck && argsCheck->isChecked();
         selectedArguments = useArgs ? parseArguments(argsEdit ? argsEdit->text() : QString()) : QStringList();
         selectedArgumentsText = useArgs && argsEdit ? argsEdit->text().trimmed() : QString();
+        selectedSandbox = sandboxCheck && sandboxCheck->isChecked();
         accept();
     }
 
@@ -647,6 +664,7 @@ OpenRequest showExecutableOpener(
     request.executable = dialog.executable();
     request.arguments = dialog.arguments();
     request.argumentsText = dialog.argumentsText();
+    request.sandbox = dialog.sandbox();
     return request;
 }
 

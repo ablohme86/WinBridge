@@ -17,6 +17,7 @@
 */
 
 #include "launcher.h"
+#include "sandbox.h"
 #include "shared_space.h"
 #include "shortcuts.h"
 
@@ -411,13 +412,20 @@ int launch(
     }
 
     QString desk = desktopDir();
+    // Shortcuts from a sandbox would point at a prefix that is deleted later,
+    // so sandboxed launches only record that the sandbox is still in use.
+    const bool sandboxed = isSandboxPrefix(compat);
+    auto syncPrefix = [&] {
+        if (sandboxed) touchSandbox(compat);
+        else importShortcuts(compat, proton, effLauncher, "", desk);
+    };
     while (proc.state() == QProcess::Running) {
-        importShortcuts(compat, proton, effLauncher, "", desk);
+        syncPrefix();
         if (proc.waitForFinished(3000)) {
             break;
         }
     }
-    importShortcuts(compat, proton, effLauncher, "", desk);
+    syncPrefix();
 
     logFile.close();
 
